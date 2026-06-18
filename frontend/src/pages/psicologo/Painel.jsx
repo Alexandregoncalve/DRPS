@@ -8,6 +8,7 @@ export default function PainelPrincipal() {
   const isAdmin = usuario.papel === "admin";
   const [view, setView] = useState("avaliacoes");
   const [empresas, setEmpresas] = useState([]);
+  const [empresasTodas, setEmpresasTodas] = useState([]);
   const [setores, setSetores] = useState([]);
   const [avaliacoes, setAvaliacoes] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
@@ -27,9 +28,10 @@ export default function PainelPrincipal() {
   useEffect(() => { carregarTudo(); }, []);
 
   async function carregarTudo() {
-    const [eR, aR] = await Promise.all([fetch(`${API}/empresas`,{headers}), fetch(`${API}/avaliacoes`,{headers})]);
-    const [emps, avals] = await Promise.all([eR.json(), aR.json()]);
+    const [eR, aR, etR] = await Promise.all([fetch(`${API}/empresas`,{headers}), fetch(`${API}/avaliacoes`,{headers}), fetch(`${API}/empresas/todas`,{headers})]);
+    const [emps, avals, empsT] = await Promise.all([eR.json(), aR.json(), etR.json()]);
     setEmpresas(Array.isArray(emps)?emps:[]);
+    setEmpresasTodas(Array.isArray(empsT)?empsT:[]);
     setAvaliacoes(Array.isArray(avals)?avals:[]);
     if (isAdmin) { const uR = await fetch(`${API}/usuarios`,{headers}); setUsuarios(await uR.json()); }
   }
@@ -257,7 +259,15 @@ export default function PainelPrincipal() {
             <Select label="Empresa *" required value={novaAval.empresa_id}
               onChange={e=>{ setNovaAval({...novaAval,empresa_id:e.target.value,setor_id:""}); carregarSetores(e.target.value); setAdicionandoSetor(false); }}>
               <option value="">Selecione</option>
-              {empresas.map(e=><option key={e.id} value={e.id}>{e.nome}</option>)}
+              <option value="">Selecione</option>
+              {empresasTodas.filter(e=>e.tipo==="matriz").map(matriz=>(
+                <optgroup key={matriz.id} label={matriz.nome}>
+                  <option value={matriz.id}>{matriz.nome} (matriz)</option>
+                  {empresasTodas.filter(f=>f.matriz_id===matriz.id).map(filial=>(
+                    <option key={filial.id} value={filial.id}>↳ {filial.nome}</option>
+                  ))}
+                </optgroup>
+              ))}
             </Select>
             {novaAval.empresa_id && (
               <div>
