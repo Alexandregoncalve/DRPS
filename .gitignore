@@ -1,0 +1,22 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Ambiente — NUNCA commitar
+.env
+*.env.local
+
+# Build
+dist/
+build/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
