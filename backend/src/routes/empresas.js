@@ -42,6 +42,30 @@ module.exports = (pool) => {
     } catch (e) { console.error(e); res.status(500).json({ erro: 'Erro interno' }); }
   });
 
+  // GET /api/empresas/todas — matrizes + filiais para dropdown de avaliação
+  router.get('/todas', autenticar, async (req, res) => {
+    const { papel, id: userId } = req.usuario;
+    try {
+      let query, params = [];
+      if (papel === 'admin') {
+        query = `SELECT e.*, m.nome as matriz_nome 
+                 FROM empresas e 
+                 LEFT JOIN empresas m ON m.id = e.matriz_id 
+                 ORDER BY e.tipo, e.nome`;
+      } else {
+        query = `SELECT DISTINCT e.*, m.nome as matriz_nome 
+                 FROM empresas e
+                 LEFT JOIN empresas m ON m.id = e.matriz_id
+                 JOIN psicologo_empresa pe ON (pe.empresa_id = e.id OR pe.empresa_id = e.matriz_id)
+                 WHERE pe.psicologo_id = $1
+                 ORDER BY e.tipo, e.nome`;
+        params = [userId];
+      }
+      const { rows } = await pool.query(query, params);
+      res.json(rows);
+    } catch (e) { console.error(e); res.status(500).json({ erro: 'Erro interno' }); }
+  });
+
   // GET /api/empresas/:id/filiais
   router.get('/:id/filiais', autenticar, async (req, res) => {
     if (req.usuario.papel === 'gestor_filial')
