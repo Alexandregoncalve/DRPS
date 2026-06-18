@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const { autenticar, exigirPapel } = require('../middleware/autenticar');
 const { audit } = require('../middleware/auditoria');
 const { sanitize } = require('../middleware/crypto');
+const { senhaForte } = require('../middleware/senhaForte');
 
 module.exports = (pool) => {
   const router = express.Router();
@@ -36,6 +37,10 @@ module.exports = (pool) => {
   router.post('/', autenticar, exigirPapel('admin', 'psicologo'), async (req, res) => {
     const { nome, email, senha, papel, crp, empresa_vinculada_id } = req.body;
     if (!nome || !email || !senha || !papel) return res.status(400).json({ erro: 'Campos obrigatórios incompletos' });
+
+    const validacao = senhaForte(senha);
+    if (!validacao.valido) return res.status(400).json({ erro: validacao.erro });
+
     const papeisPermitidos = req.usuario.papel === 'admin'
       ? ['admin', 'psicologo', 'gestor_matriz', 'gestor_filial']
       : ['gestor_matriz', 'gestor_filial'];
@@ -43,7 +48,7 @@ module.exports = (pool) => {
     try {
       const hash = await bcrypt.hash(senha, 10);
       const { rows } = await pool.query(
-        'INSERT INTO usuarios (nome, email, senha_hash, papel, crp, empresa_vinculada_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,nome,email,papel,crp',
+        'INSERT INTO usuarios (nome, email, senha_hash, papel, crp, empresa_vinculada_id, precisa_trocar_senha) VALUES ($1,$2,$3,$4,$5,$6,true) RETURNING id,nome,email,papel,crp',
         [sanitize(nome), sanitize(email), hash, papel, sanitize(crp) || null, empresa_vinculada_id || null]
       );
       await audit(pool, 'USUARIO_CRIADO', req.usuario.id, { email, papel }, req);
