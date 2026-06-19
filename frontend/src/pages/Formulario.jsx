@@ -50,6 +50,11 @@ const PERGUNTAS = [
   {num:45,texto:"A distância física entre você e sua equipe dificulta a troca de informações?"},
   {num:46,texto:"Você já teve dificuldade para receber informações importantes no momento certo?"},
   {num:47,texto:"Você tem acesso fácil aos meios necessários para se comunicar com colegas e liderança?"},
+  {num:48,texto:"Você sente falta de contato presencial com colegas e liderança no seu dia a dia de trabalho?"},
+  {num:49,texto:"Você se sente isolado(a) socialmente por trabalhar remotamente ou longe da equipe?"},
+  {num:50,texto:"Você sente falta de acompanhamento da liderança por não estar fisicamente presente?"},
+  {num:51,texto:"A ausência de convívio presencial já afetou negativamente seu bem-estar emocional?"},
+  {num:52,texto:"Você consegue se desconectar do trabalho fora do horário, mesmo trabalhando remotamente?"},
 ];
 const ESCALA = [{valor:1,label:"Nunca"},{valor:2,label:"Raramente"},{valor:3,label:"Às vezes"},{valor:4,label:"Frequentemente"},{valor:5,label:"Sempre"}];
 
@@ -70,7 +75,7 @@ export default function Formulario({ token }) {
 
   async function enviar(e) {
     e.preventDefault();
-    if (Object.keys(respostas).length < 47) {
+    if (Object.keys(respostas).length < 52) {
       setErroEnvio("Por favor, responda todas as perguntas.");
       const naoResp = PERGUNTAS.filter(p=>!respostas[p.num]);
       if (naoResp.length>0) { const el=document.getElementById(`p-${naoResp[0].num}`); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); }
@@ -137,7 +142,7 @@ export default function Formulario({ token }) {
           <div className="flex items-center justify-between mb-1">
             <div>
               <p className="text-sm font-medium text-gray-900">{avaliacao.empresa_nome}</p>
-              <p className="text-xs text-gray-400">{avaliacao.setor_nome} · Anônimo · {respondidas}/47</p>
+              <p className="text-xs text-gray-400">{avaliacao.setor_nome} · Anônimo · {respondidas}/52</p>
             </div>
             {vagasRestantes!==null && (
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${vagasRestantes>0?"bg-green-100 text-green-700":"bg-red-100 text-red-700"}`}>
@@ -146,7 +151,7 @@ export default function Formulario({ token }) {
             )}
           </div>
           <div className="w-full bg-gray-100 rounded-full h-1">
-            <div className="bg-blue-500 h-1 rounded-full transition-all" style={{width:`${(respondidas/47)*100}%`}}/>
+            <div className="bg-blue-500 h-1 rounded-full transition-all" style={{width:`${(respondidas/52)*100}%`}}/>
           </div>
         </div>
       </header>
@@ -181,7 +186,7 @@ export default function Formulario({ token }) {
         })}
         <button type="submit" disabled={loading}
           className="w-full bg-blue-600 text-white rounded-xl py-3 font-medium hover:bg-blue-700 disabled:opacity-50">
-          {loading?"Enviando...":respondidas<47?`Enviar (${respondidas}/47)`:"Enviar respostas"}
+          {loading?"Enviando...":respondidas<52?`Enviar (${respondidas}/52)`:"Enviar respostas"}
         </button>
       </form>
     </div>

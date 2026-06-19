@@ -35,10 +35,10 @@ module.exports = (pool) => {
     const token = sanitize(req.params.token);
     if (!/^[a-f0-9]{64}$/.test(token)) return res.status(400).json({ erro: 'Token inválido' });
     const { respostas } = req.body;
-    if (!Array.isArray(respostas) || respostas.length !== 47)
-      return res.status(400).json({ erro: 'Envie exatamente 47 respostas' });
+    if (!Array.isArray(respostas) || respostas.length !== 52)
+      return res.status(400).json({ erro: 'Envie exatamente 52 respostas' });
     for (const r of respostas) {
-      if (!Number.isInteger(r.pergunta_num) || r.pergunta_num < 1 || r.pergunta_num > 47)
+      if (!Number.isInteger(r.pergunta_num) || r.pergunta_num < 1 || r.pergunta_num > 52)
         return res.status(400).json({ erro: 'Pergunta inválida' });
       if (!Number.isInteger(r.valor_original) || r.valor_original < 1 || r.valor_original > 5)
         return res.status(400).json({ erro: 'Valor inválido' });

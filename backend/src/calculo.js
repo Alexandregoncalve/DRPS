@@ -18,6 +18,7 @@ const LOGICA_PERGUNTAS = {
   37:'D', 38:'D', 39:'D', 40:'I',       // Tópico 10 - Sobrecarga
   41:'D', 42:'D', 43:'I',               // Tópico 11 - Relacionamentos
   44:'D', 45:'D', 46:'D', 47:'I',       // Tópico 12 - Comunicação difícil
+  48:'D', 49:'D', 50:'D', 51:'D', 52:'I', // Tópico 13 - Trabalho remoto e isolado
 };
 
 // Perguntas por tópico
@@ -34,7 +35,7 @@ const TOPICOS = [
   { num: 10, nome: 'Excesso de demandas no trabalho (Sobrecarga)',      perguntas: [37,38,39,40],  fonte: 'Metas irrealistas; equipe insuficiente; jornadas prolongadas; acúmulo de funções.' },
   { num: 11, nome: 'Maus relacionamentos no local de trabalho',         perguntas: [41,42,43],     fonte: 'Comunicação agressiva; rivalidade interna; conflitos mal geridos.' },
   { num: 12, nome: 'Trabalho em condições de difícil comunicação',      perguntas: [44,45,46,47],  fonte: 'Turnos desalinhados; distância física; falha nos meios de comunicação.' },
-  { num: 13, nome: 'Trabalho remoto e isolado',                         perguntas: [],             fonte: 'Isolamento social; falta de acompanhamento; comunicação exclusivamente digital.' },
+  { num: 13, nome: 'Trabalho remoto e isolado',                         perguntas: [48,49,50,51,52], fonte: 'Isolamento social; falta de acompanhamento; comunicação exclusivamente digital.' },
 ];
 
 // Aplica lógica direta ou invertida

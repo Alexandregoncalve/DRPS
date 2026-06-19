@@ -16,6 +16,7 @@ export default function PainelPrincipal() {
   const [resultados, setResultados] = useState(null);
   const [probabilidades, setProbabilidades] = useState({});
   const [msg, setMsg] = useState(""); const [erro, setErro] = useState("");
+  const [processando, setProcessando] = useState(false);
   const [novaEmp, setNovaEmp] = useState({ nome:"", cnpj:"", total_funcionarios:"", tipo:"matriz", matriz_id:"" });
   const [novoSetor, setNovoSetor] = useState({ nome:"", total_funcionarios:"" });
   const [adicionandoSetor, setAdicionandoSetor] = useState(false);
@@ -115,11 +116,25 @@ export default function PainelPrincipal() {
   }
 
   async function salvarProbabilidades() {
-    const probs=Object.entries(probabilidades).map(([t,v])=>({topico_num:parseInt(t),valor:parseInt(v)}));
-    await fetch(`${API}/avaliacoes/${avalSelecionada.id}/probabilidades`,{method:"POST",headers,body:JSON.stringify({probabilidades:probs})});
-    await fetch(`${API}/avaliacoes/${avalSelecionada.id}/processar`,{method:"POST",headers});
-    const r=await fetch(`${API}/avaliacoes/${avalSelecionada.id}/resultados`,{headers});
-    setResultados(await r.json()); setMsg("✅ Matriz processada!");
+    if (processando) return;
+    setProcessando(true);
+    setErro("");
+    try {
+      const probs=Object.entries(probabilidades).map(([t,v])=>({topico_num:parseInt(t),valor:parseInt(v)}));
+      const r1 = await fetch(`${API}/avaliacoes/${avalSelecionada.id}/probabilidades`,{method:"POST",headers,body:JSON.stringify({probabilidades:probs})});
+      if (!r1.ok) { const d1 = await r1.json(); throw new Error(d1.erro || "Erro ao salvar probabilidades"); }
+
+      const r2 = await fetch(`${API}/avaliacoes/${avalSelecionada.id}/processar`,{method:"POST",headers});
+      if (!r2.ok) { const d2 = await r2.json(); throw new Error(d2.erro || "Erro ao processar matriz"); }
+
+      const r3 = await fetch(`${API}/avaliacoes/${avalSelecionada.id}/resultados`,{headers});
+      setResultados(await r3.json());
+      setMsg("✅ Matriz processada!");
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setProcessando(false);
+    }
   }
 
   // ---- VIEW: RESULTADOS ----
@@ -160,7 +175,9 @@ export default function PainelPrincipal() {
           </tbody>
         </table>
       </Card>
-      <Btn onClick={salvarProbabilidades}>Salvar e processar matriz</Btn>
+      <Btn onClick={salvarProbabilidades} disabled={processando}>
+        {processando ? "Processando..." : "Salvar e processar matriz"}
+      </Btn>
     </Layout>
   );
 
