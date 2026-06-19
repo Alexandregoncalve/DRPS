@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth, API } from "../../contexts/AuthContext";
 import { Layout } from "../../components/Layout";
 import { Card, Btn, BadgeRisco, BarraProgresso, Alert, Input, Select } from "../../components/ui";
+import CriteriosProbabilidadeModal from "./CriteriosProbabilidadeModal";
 
 const SETORES_COMUNS = [
   "Administrativo", "Comercial / Vendas", "Financeiro", "Recursos Humanos",
@@ -24,6 +25,7 @@ export default function PainelPrincipal() {
   const [probabilidades, setProbabilidades] = useState({});
   const [msg, setMsg] = useState(""); const [erro, setErro] = useState("");
   const [processando, setProcessando] = useState(false);
+  const [topicoModalAberto, setTopicoModalAberto] = useState(null);
   const [novaEmp, setNovaEmp] = useState({ nome:"", cnpj:"", total_funcionarios:"", tipo:"matriz", matriz_id:"" });
   const [novoSetor, setNovoSetor] = useState({ nome:"", total_funcionarios:"" });
   const [adicionandoSetor, setAdicionandoSetor] = useState(false);
@@ -178,17 +180,36 @@ export default function PainelPrincipal() {
                 <td className="px-4 py-3 text-center"><BadgeRisco valor={r.classif_probabilidade}/></td>
                 <td className="px-4 py-3 text-center"><BadgeRisco valor={r.matriz_risco}/></td>
                 <td className="px-4 py-3 text-center">
-                  <select value={probabilidades[r.topico_num]||2}
-                    onChange={ev=>setProbabilidades({...probabilidades,[r.topico_num]:ev.target.value})}
-                    className="border border-gray-200 rounded px-2 py-1 text-xs">
-                    <option value={1}>1 - Baixa</option><option value={2}>2 - Média</option><option value={3}>3 - Alta</option>
-                  </select>
+                  <div className="flex items-center gap-1.5 justify-center">
+                    <select value={probabilidades[r.topico_num]||2}
+                      onChange={ev=>setProbabilidades({...probabilidades,[r.topico_num]:ev.target.value})}
+                      className="border border-gray-200 rounded px-2 py-1 text-xs">
+                      <option value={1}>1 - Baixa</option><option value={2}>2 - Média</option><option value={3}>3 - Alta</option>
+                    </select>
+                    <button type="button" onClick={()=>setTopicoModalAberto(r)}
+                      title="Responder critérios guiados"
+                      className="text-xs text-blue-600 hover:underline whitespace-nowrap">
+                      📋
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </Card>
+
+      {topicoModalAberto && (
+        <CriteriosProbabilidadeModal
+          avaliacaoId={avalSelecionada.id}
+          topicoNum={topicoModalAberto.topico_num}
+          topicoNome={topicoModalAberto.topico_nome}
+          onFechar={()=>setTopicoModalAberto(null)}
+          onAplicar={(sugestao)=>{
+            setProbabilidades({...probabilidades,[topicoModalAberto.topico_num]:sugestao});
+          }}
+        />
+      )}
       <div>
         <Btn onClick={salvarProbabilidades} disabled={processando}>
           {processando ? "Processando..." : "Salvar e processar matriz"}

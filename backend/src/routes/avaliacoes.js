@@ -5,6 +5,7 @@ const { rateLimit } = require('../middleware/rateLimit');
 const { audit } = require('../middleware/auditoria');
 const { sanitize } = require('../middleware/crypto');
 const { calcularResultados } = require('../calculo');
+const { CRITERIOS_PROBABILIDADE, calcularSugestaoProbabilidade } = require('../criteriosProbabilidade');
 
 module.exports = (pool) => {
   const router = express.Router();
@@ -95,6 +96,47 @@ module.exports = (pool) => {
       const contagem = { Baixo: 0, Médio: 0, Alto: 0, Crítico: 0 };
       rows.forEach(r => { if (contagem[r.matriz_risco] !== undefined) contagem[r.matriz_risco]++; });
       res.json({ resultados: rows, contagem });
+    } catch (e) { console.error('ERRO:', e); res.status(500).json({ erro: e.message }); }
+  });
+
+
+  // GET /api/avaliacoes/criterios-probabilidade — lista as perguntas guiadas
+  router.get('/criterios-probabilidade', autenticar, (req, res) => {
+    res.json(CRITERIOS_PROBABILIDADE);
+  });
+
+  // GET /api/avaliacoes/:id/criterios — busca respostas salvas dos critérios por tópico
+  router.get('/:id/criterios', autenticar, async (req, res) => {
+    try {
+      const { rows } = await pool.query(
+        'SELECT topico_num, criterio_codigo, resposta_valor FROM criterios_probabilidade WHERE avaliacao_id=$1',
+        [req.params.id]
+      );
+      // Agrupar por tópico: { 1: { frequencia: 3, duracao: 2 }, 2: {...} }
+      const agrupado = {};
+      rows.forEach(r => {
+        if (!agrupado[r.topico_num]) agrupado[r.topico_num] = {};
+        agrupado[r.topico_num][r.criterio_codigo] = r.resposta_valor;
+      });
+      res.json(agrupado);
+    } catch (e) { console.error('ERRO:', e); res.status(500).json({ erro: e.message }); }
+  });
+
+  // POST /api/avaliacoes/:id/criterios — salva respostas dos critérios e retorna sugestão
+  router.post('/:id/criterios', autenticar, exigirPapel('admin', 'psicologo'), async (req, res) => {
+    const { topico_num, respostas } = req.body; // respostas: { frequencia: 3, duracao: 2, ... }
+    if (!topico_num || !respostas) return res.status(400).json({ erro: 'Dados incompletos' });
+    try {
+      for (const [codigo, valor] of Object.entries(respostas)) {
+        await pool.query(
+          `INSERT INTO criterios_probabilidade (avaliacao_id, topico_num, criterio_codigo, resposta_valor)
+           VALUES ($1,$2,$3,$4)
+           ON CONFLICT (avaliacao_id, topico_num, criterio_codigo) DO UPDATE SET resposta_valor=$4`,
+          [req.params.id, topico_num, codigo, valor]
+        );
+      }
+      const sugestao = calcularSugestaoProbabilidade(respostas);
+      res.json({ ok: true, sugestao });
     } catch (e) { console.error('ERRO:', e); res.status(500).json({ erro: e.message }); }
   });
 
