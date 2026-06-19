@@ -3,6 +3,13 @@ import { useAuth, API } from "../../contexts/AuthContext";
 import { Layout } from "../../components/Layout";
 import { Card, Btn, BadgeRisco, BarraProgresso, Alert, Input, Select } from "../../components/ui";
 
+const SETORES_COMUNS = [
+  "Administrativo", "Comercial / Vendas", "Financeiro", "Recursos Humanos",
+  "Tecnologia da Informação", "Operacional", "Produção", "Logística",
+  "Atendimento / SAC", "Marketing", "Jurídico", "Diretoria / Gestão",
+  "Qualidade", "Compras", "Manutenção",
+];
+
 export default function PainelPrincipal() {
   const { token, usuario } = useAuth();
   const isAdmin = usuario.papel === "admin";
@@ -111,7 +118,14 @@ export default function PainelPrincipal() {
     setAvalSelecionada(aval);
     const r = await fetch(`${API}/avaliacoes/${aval.id}/resultados`,{headers});
     const d = await r.json(); setResultados(d);
-    const p={}; d.resultados.forEach(x=>{ p[x.topico_num]=x.media_probabilidade||2; }); setProbabilidades(p);
+
+    // Inicializa TODOS os 13 tópicos com valor padrão 2 (Média),
+    // mesmo que ainda não tenham sido processados antes
+    const p = {};
+    for (let i = 1; i <= 13; i++) p[i] = 2;
+    d.resultados.forEach(x => { p[x.topico_num] = x.media_probabilidade || 2; });
+    setProbabilidades(p);
+
     setView("resultados");
   }
 
@@ -175,9 +189,14 @@ export default function PainelPrincipal() {
           </tbody>
         </table>
       </Card>
-      <Btn onClick={salvarProbabilidades} disabled={processando}>
-        {processando ? "Processando..." : "Salvar e processar matriz"}
-      </Btn>
+      <div>
+        <Btn onClick={salvarProbabilidades} disabled={processando}>
+          {processando ? "Processando..." : "Salvar e processar matriz"}
+        </Btn>
+        <p className="text-xs text-gray-400 mt-2">
+          Confirme a probabilidade de cada tópico acima antes de processar. O valor padrão é "2 - Média" até você ajustar.
+        </p>
+      </div>
     </Layout>
   );
 
@@ -318,7 +337,19 @@ export default function PainelPrincipal() {
                 {adicionandoSetor && (
                   <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-2">
                     <form onSubmit={adicionarSetor} className="space-y-2">
-                      <Input required placeholder="Nome do setor" value={novoSetor.nome} onChange={e=>setNovoSetor({...novoSetor,nome:e.target.value})}/>
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1.5">Setores comuns (clique para usar)</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {SETORES_COMUNS.map(s => (
+                            <button key={s} type="button"
+                              onClick={() => setNovoSetor({ ...novoSetor, nome: s })}
+                              className={`text-xs px-2.5 py-1 rounded-full border transition-all ${novoSetor.nome===s ? "border-blue-500 bg-blue-100 text-blue-800" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"}`}>
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <Input required placeholder="Ou digite um nome personalizado" value={novoSetor.nome} onChange={e=>setNovoSetor({...novoSetor,nome:e.target.value})}/>
                       <Input type="number" min="1" placeholder="Nº de funcionários" value={novoSetor.total_funcionarios} onChange={e=>setNovoSetor({...novoSetor,total_funcionarios:e.target.value})}/>
                       <Btn type="submit" className="text-xs py-1.5">Adicionar</Btn>
                     </form>
