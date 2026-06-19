@@ -47,9 +47,12 @@ function calcularPontuacaoCorrigida(perguntaNum, valorOriginal) {
 }
 
 // Classifica gravidade com base na pontuação corrigida
+// Escala de respostas: 1 a 5 (Nunca/Raramente/Às vezes/Frequentemente/Sempre)
+// Cortes em terços iguais da escala, mesma proporção da planilha original (que usava 1-3):
+// 1.00–2.33 Baixa | 2.34–3.66 Média | 3.67–5.00 Alta
 function classificarGravidade(media) {
-  if (media >= 3) return 'Alta';
-  if (media >= 2) return 'Média';
+  if (media >= 3.67) return 'Alta';
+  if (media >= 2.34) return 'Média';
   return 'Baixa';
 }
 
