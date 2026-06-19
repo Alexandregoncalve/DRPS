@@ -52,11 +52,17 @@ module.exports = (pool) => {
       if (!rows.length) throw new Error('Avaliação não encontrada');
       if (rows[0].status === 'encerrada') throw new Error('Avaliação encerrada');
       const avaliacaoId = rows[0].id;
-      const ipHash = crypto.createHash('sha256').update(req.ip || '').digest('hex');
+
+      // Fingerprint: IP + user-agent + idioma do navegador (não bloqueia colegas na mesma rede Wi-Fi)
+      const userAgent = req.headers['user-agent'] || '';
+      const idioma = req.headers['accept-language'] || '';
+      const fingerprintBase = `${req.ip || ''}|${userAgent}|${idioma}`;
+      const ipHash = crypto.createHash('sha256').update(fingerprintBase).digest('hex');
+
       const { rows: jaResp } = await client.query(
         'SELECT id FROM respostas WHERE avaliacao_id=$1 AND ip_hash=$2 LIMIT 1', [avaliacaoId, ipHash]
       );
-      if (jaResp.length > 0) throw new Error('Você já respondeu esta avaliação');
+      if (jaResp.length > 0) throw new Error('Este dispositivo já respondeu esta avaliação. Se você compartilha o computador/celular com um colega, peça para ele usar o próprio aparelho.');
       const { rows: setorRows } = await client.query(
         'SELECT s.total_funcionarios, a.total_respostas FROM avaliacoes a JOIN setores s ON a.setor_id=s.id WHERE a.id=$1', [avaliacaoId]
       );
