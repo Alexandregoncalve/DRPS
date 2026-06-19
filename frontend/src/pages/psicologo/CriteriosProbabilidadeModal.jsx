@@ -71,7 +71,7 @@ export default function CriteriosProbabilidadeModal({ avaliacaoId, topicoNum, to
                 <div className="space-y-3">
                   {itens.map(c => (
                     <div key={c.codigo}>
-                      <p className="text-sm text-gray-700 mb-2">{c.pergunta}</p>
+                      <p className="text-base font-bold text-gray-900 mb-2">{c.pergunta}</p>
                       <div className="flex flex-wrap gap-2">
                         {c.opcoes.map(op => (
                           <button key={op.valor} type="button"
