@@ -13,11 +13,15 @@ export default function CriteriosProbabilidadeModal({ avaliacaoId, topicoNum, to
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
   useEffect(() => {
+    setCriterios([]);
+    setRespostas({});
+    setSugestao(null);
+
     fetch(`${API}/avaliacoes/criterios-probabilidade`, { headers }).then(r => r.json()).then(setCriterios);
     fetch(`${API}/avaliacoes/${avaliacaoId}/criterios`, { headers }).then(r => r.json()).then(d => {
       if (d[topicoNum]) setRespostas(d[topicoNum]);
     });
-  }, []);
+  }, [avaliacaoId, topicoNum]);
 
   async function salvar() {
     setSalvando(true);

@@ -166,8 +166,8 @@ export default function Formulario({ token }) {
           return (
             <div id={`p-${p.num}`} key={p.num}
               className={`bg-white rounded-xl border p-4 transition-all ${naoResp?"border-red-400 bg-red-50":"border-gray-200"}`}>
-              <p className="text-sm text-gray-700 mb-3">
-                <span className="text-xs text-gray-400 mr-2">{i+1}.</span>{p.texto}
+              <p className="text-base font-bold text-gray-900 mb-3">
+                <span className="text-xs text-gray-400 mr-2 font-normal">{i+1}.</span>{p.texto}
                 {naoResp && <span className="ml-1 text-xs text-red-500">*</span>}
               </p>
               <div className="flex gap-2">
