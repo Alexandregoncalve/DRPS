@@ -58,6 +58,7 @@ export default function Formulario({ token }) {
   const [respostas, setRespostas] = useState({});
   const [enviado, setEnviado] = useState(false);
   const [erro, setErro] = useState("");
+  const [erroEnvio, setErroEnvio] = useState("");
   const [loading, setLoading] = useState(false);
   const [consentido, setConsentido] = useState(false);
 
@@ -70,17 +71,28 @@ export default function Formulario({ token }) {
   async function enviar(e) {
     e.preventDefault();
     if (Object.keys(respostas).length < 47) {
-      setErro("Por favor, responda todas as perguntas.");
+      setErroEnvio("Por favor, responda todas as perguntas.");
       const naoResp = PERGUNTAS.filter(p=>!respostas[p.num]);
       if (naoResp.length>0) { const el=document.getElementById(`p-${naoResp[0].num}`); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); }
       return;
     }
-    setErro(""); setLoading(true);
-    const lista = Object.entries(respostas).map(([pn,vo])=>({pergunta_num:parseInt(pn),valor_original:parseInt(vo)}));
-    const r = await fetch(`${API}/responder/${token}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({respostas:lista})});
-    const d = await r.json();
-    if (d.ok) setEnviado(true); else setErro(d.erro);
-    setLoading(false);
+    setErroEnvio(""); setLoading(true);
+    try {
+      const lista = Object.entries(respostas).map(([pn,vo])=>({pergunta_num:parseInt(pn),valor_original:parseInt(vo)}));
+      const r = await fetch(`${API}/responder/${token}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({respostas:lista})});
+      const d = await r.json();
+      if (r.ok && d.ok) {
+        setEnviado(true);
+      } else {
+        setErroEnvio(d.erro || "Não foi possível enviar suas respostas. Tente novamente.");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch (e) {
+      setErroEnvio("Erro de conexão. Verifique sua internet e tente novamente.");
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (erro && !avaliacao) return (
@@ -139,9 +151,13 @@ export default function Formulario({ token }) {
         </div>
       </header>
       <form onSubmit={enviar} className="max-w-2xl mx-auto p-4 space-y-3">
-        {erro && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">⚠️ {erro}</div>}
+        {erroEnvio && (
+          <div className="bg-red-50 border border-red-300 rounded-lg p-4 text-sm text-red-800 font-medium">
+            ⚠️ {erroEnvio}
+          </div>
+        )}
         {PERGUNTAS.map((p,i)=>{
-          const naoResp = erro && !respostas[p.num];
+          const naoResp = erroEnvio && !respostas[p.num];
           return (
             <div id={`p-${p.num}`} key={p.num}
               className={`bg-white rounded-xl border p-4 transition-all ${naoResp?"border-red-400 bg-red-50":"border-gray-200"}`}>
@@ -154,7 +170,7 @@ export default function Formulario({ token }) {
                   <label key={op.valor} className={`flex-1 cursor-pointer rounded-lg border text-center py-2 px-1 text-xs transition-all
                     ${respostas[p.num]==op.valor?"border-blue-500 bg-blue-50 text-blue-800 font-medium":"border-gray-200 text-gray-500 hover:border-gray-300"}`}>
                     <input type="radio" name={`p${p.num}`} value={op.valor}
-                      onChange={()=>{ setRespostas({...respostas,[p.num]:op.valor}); if(erro) setErro(""); }} className="sr-only"/>
+                      onChange={()=>{ setRespostas({...respostas,[p.num]:op.valor}); if(erroEnvio) setErroEnvio(""); }} className="sr-only"/>
                     <span className="block font-medium">{op.valor}</span>
                     <span className="text-xs">{op.label}</span>
                   </label>

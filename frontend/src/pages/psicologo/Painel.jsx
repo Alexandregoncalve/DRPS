@@ -22,6 +22,7 @@ export default function PainelPrincipal() {
   const [novaAval, setNovaAval] = useState({ empresa_id:"", setor_id:"", data_fim:"" });
   const [novoUsr, setNovoUsr] = useState({ nome:"", email:"", senha:"", papel:"gestor_matriz", crp:"", empresa_vinculada_id:"" });
   const [empresaSel, setEmpresaSel] = useState(null);
+  const [usuarioEditando, setUsuarioEditando] = useState(null);
 
   const headers = { "Content-Type":"application/json", Authorization:`Bearer ${token}` };
 
@@ -46,6 +47,15 @@ export default function PainelPrincipal() {
     v=v.replace(/\D/g,'');
     if(v.length<=14) v=v.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2');
     return v;
+  }
+
+  function sugerirEmail(nomeEmpresa) {
+    const slug = nomeEmpresa
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-z0-9]+/g,'')
+      .slice(0,30);
+    return `gestor.${slug}@nexa.com.br`;
   }
 
   async function criarEmpresa(e) {
@@ -82,6 +92,17 @@ export default function PainelPrincipal() {
     if (!r.ok) { setErro(d.erro); return; }
     setMsg(`✅ Usuário "${novoUsr.nome}" criado!`);
     setNovoUsr({nome:"",email:"",senha:"",papel:"gestor_matriz",crp:"",empresa_vinculada_id:""});
+    carregarTudo(); setView("usuarios");
+  }
+
+  async function salvarEdicaoUsuario(e) {
+    e.preventDefault(); setErro("");
+    const r = await fetch(`${API}/usuarios/${usuarioEditando.id}`,{method:"PUT",headers,body:JSON.stringify(novoUsr)});
+    const d = await r.json();
+    if (!r.ok) { setErro(d.erro); return; }
+    setMsg(`✅ Usuário "${novoUsr.nome}" atualizado!`);
+    setNovoUsr({nome:"",email:"",senha:"",papel:"gestor_matriz",crp:"",empresa_vinculada_id:""});
+    setUsuarioEditando(null);
     carregarTudo(); setView("usuarios");
   }
 
@@ -323,6 +344,7 @@ export default function PainelPrincipal() {
                   <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium">E-mail</th>
                   <th className="px-4 py-3 text-xs text-gray-400 font-medium">Perfil</th>
                   <th className="px-4 py-3 text-xs text-gray-400 font-medium">Empresa</th>
+                  <th className="px-4 py-3"></th>
                 </tr></thead>
                 <tbody>{usuarios.map(u=>(
                   <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
@@ -330,6 +352,13 @@ export default function PainelPrincipal() {
                     <td className="px-4 py-3 text-gray-500 text-xs">{u.email}</td>
                     <td className="px-4 py-3 text-center"><BadgeRisco valor={u.papel}/></td>
                     <td className="px-4 py-3 text-center text-xs text-gray-400">{u.empresa_nome||"—"}</td>
+                    <td className="px-4 py-3 text-right">
+                      <Btn variant="ghost" className="text-xs" onClick={()=>{
+                        setUsuarioEditando(u);
+                        setNovoUsr({nome:u.nome,email:u.email,senha:"",papel:u.papel,crp:u.crp||"",empresa_vinculada_id:u.empresa_vinculada_id||""});
+                        setView("editar_usuario");
+                      }}>Editar</Btn>
+                    </td>
                   </tr>
                 ))}</tbody>
               </table>
@@ -344,7 +373,12 @@ export default function PainelPrincipal() {
           <h2 className="font-medium text-gray-900 mb-4">Novo usuário</h2>
           <form onSubmit={criarUsuario} className="space-y-3">
             <Input label="Nome *" required value={novoUsr.nome} onChange={e=>setNovoUsr({...novoUsr,nome:e.target.value})}/>
-            <Input label="E-mail *" required type="email" value={novoUsr.email} onChange={e=>setNovoUsr({...novoUsr,email:e.target.value})}/>
+            <div>
+              <Input label="E-mail *" required type="email" value={novoUsr.email} onChange={e=>setNovoUsr({...novoUsr,email:e.target.value})}/>
+              {["gestor_matriz","gestor_filial"].includes(novoUsr.papel) && novoUsr.empresa_vinculada_id && (
+                <p className="text-xs text-gray-400 mt-1">💡 Sugerido automaticamente — edite se quiser usar outro e-mail</p>
+              )}
+            </div>
             <Input label="Senha *" required type="password" value={novoUsr.senha} onChange={e=>setNovoUsr({...novoUsr,senha:e.target.value})}/>
             <Select label="Perfil *" value={novoUsr.papel} onChange={e=>setNovoUsr({...novoUsr,papel:e.target.value})}>
               <option value="psicologo">Psicólogo</option>
@@ -353,17 +387,74 @@ export default function PainelPrincipal() {
               <option value="admin">Admin NeXa</option>
             </Select>
             {["gestor_matriz","gestor_filial"].includes(novoUsr.papel) && (
-              <Select label="Empresa vinculada" value={novoUsr.empresa_vinculada_id} onChange={e=>setNovoUsr({...novoUsr,empresa_vinculada_id:e.target.value})}>
+              <Select label="Empresa vinculada" value={novoUsr.empresa_vinculada_id}
+                onChange={e=>{
+                  const empSelecionada = empresasTodas.find(emp=>emp.id===e.target.value);
+                  setNovoUsr({
+                    ...novoUsr,
+                    empresa_vinculada_id:e.target.value,
+                    email: empSelecionada ? sugerirEmail(empSelecionada.nome) : novoUsr.email
+                  });
+                }}>
                 <option value="">Selecione</option>
-                {empresas.map(e=><option key={e.id} value={e.id}>{e.nome}</option>)}
+                {empresasTodas.filter(e=>e.tipo==="matriz").map(matriz=>(
+                  <optgroup key={matriz.id} label={matriz.nome}>
+                    <option value={matriz.id}>{matriz.nome} (matriz)</option>
+                    {empresasTodas.filter(f=>f.matriz_id===matriz.id).map(filial=>(
+                      <option key={filial.id} value={filial.id}>↳ {filial.nome}</option>
+                    ))}
+                  </optgroup>
+                ))}
               </Select>
             )}
-            {novoUsr.papel==="psicologo" && (
-              <Input label="CRP" placeholder="CRP 00/000000" value={novoUsr.crp} onChange={e=>setNovoUsr({...novoUsr,crp:e.target.value})}/>
-            )}
+            <Input label={novoUsr.papel==="psicologo" ? "CRP *" : "CRP (opcional)"} placeholder="CRP 00/000000" value={novoUsr.crp} onChange={e=>setNovoUsr({...novoUsr,crp:e.target.value})}/>
+            <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
+              A senha deve ter: mínimo 8 caracteres, 1 maiúscula, 1 minúscula, 1 número e 1 símbolo (ex: Empresa@2025).
+              O usuário será solicitado a trocar a senha no primeiro acesso.
+            </div>
             <div className="flex gap-2 pt-1">
               <Btn type="submit">Criar usuário</Btn>
               <Btn variant="secondary" onClick={()=>setView("usuarios")}>Cancelar</Btn>
+            </div>
+          </form>
+        </Card>
+      )}
+
+      {/* EDITAR USUÁRIO */}
+      {view==="editar_usuario" && isAdmin && usuarioEditando && (
+        <Card className="p-6 max-w-md">
+          <h2 className="font-medium text-gray-900 mb-4">Editar usuário</h2>
+          <form onSubmit={salvarEdicaoUsuario} className="space-y-3">
+            <Input label="Nome *" required value={novoUsr.nome} onChange={e=>setNovoUsr({...novoUsr,nome:e.target.value})}/>
+            <Input label="E-mail *" required type="email" value={novoUsr.email} onChange={e=>setNovoUsr({...novoUsr,email:e.target.value})}/>
+            <div>
+              <Input label="Nova senha" type="password" placeholder="Deixe em branco para manter a atual" value={novoUsr.senha} onChange={e=>setNovoUsr({...novoUsr,senha:e.target.value})}/>
+              <p className="text-xs text-gray-400 mt-1">Preencha apenas se quiser alterar a senha</p>
+            </div>
+            <Select label="Perfil *" value={novoUsr.papel} onChange={e=>setNovoUsr({...novoUsr,papel:e.target.value})}>
+              <option value="psicologo">Psicólogo</option>
+              <option value="gestor_matriz">Gestor Matriz</option>
+              <option value="gestor_filial">Gestor Filial</option>
+              <option value="admin">Admin NeXa</option>
+            </Select>
+            {["gestor_matriz","gestor_filial"].includes(novoUsr.papel) && (
+              <Select label="Empresa vinculada" value={novoUsr.empresa_vinculada_id}
+                onChange={e=>setNovoUsr({...novoUsr,empresa_vinculada_id:e.target.value})}>
+                <option value="">Selecione</option>
+                {empresasTodas.filter(e=>e.tipo==="matriz").map(matriz=>(
+                  <optgroup key={matriz.id} label={matriz.nome}>
+                    <option value={matriz.id}>{matriz.nome} (matriz)</option>
+                    {empresasTodas.filter(f=>f.matriz_id===matriz.id).map(filial=>(
+                      <option key={filial.id} value={filial.id}>↳ {filial.nome}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </Select>
+            )}
+            <Input label="CRP (opcional)" placeholder="CRP 00/000000" value={novoUsr.crp} onChange={e=>setNovoUsr({...novoUsr,crp:e.target.value})}/>
+            <div className="flex gap-2 pt-1">
+              <Btn type="submit">Salvar alterações</Btn>
+              <Btn variant="secondary" onClick={()=>{ setUsuarioEditando(null); setNovoUsr({nome:"",email:"",senha:"",papel:"gestor_matriz",crp:"",empresa_vinculada_id:""}); setView("usuarios"); }}>Cancelar</Btn>
             </div>
           </form>
         </Card>

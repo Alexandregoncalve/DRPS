@@ -22,7 +22,7 @@ module.exports = (pool) => {
       const link = `${process.env.FRONTEND_URL || 'http://localhost:8080'}/responder/${avaliacao.token_anonimo}`;
       await audit(pool, 'AVALIACAO_CRIADA', req.usuario.id, { setor_id, avaliacao_id: avaliacao.id }, req);
       res.json({ ...avaliacao, link_anonimo: link });
-    } catch (e) { res.status(500).json({ erro: 'Erro interno' }); }
+    } catch (e) { console.error('ERRO:', e); res.status(500).json({ erro: e.message }); }
   });
 
   // GET /api/avaliacoes
@@ -46,7 +46,7 @@ module.exports = (pool) => {
 
       const { rows } = await pool.query(query, params);
       res.json(rows);
-    } catch (e) { res.status(500).json({ erro: 'Erro interno' }); }
+    } catch (e) { console.error('ERRO:', e); res.status(500).json({ erro: e.message }); }
   });
 
   // POST /api/avaliacoes/:id/probabilidades
@@ -61,7 +61,7 @@ module.exports = (pool) => {
         );
       }
       res.json({ ok: true });
-    } catch (e) { res.status(500).json({ erro: 'Erro interno' }); }
+    } catch (e) { console.error('ERRO:', e); res.status(500).json({ erro: e.message }); }
   });
 
   // POST /api/avaliacoes/:id/processar
@@ -85,7 +85,7 @@ module.exports = (pool) => {
       await pool.query("UPDATE avaliacoes SET status='processada' WHERE id=$1", [id]);
       await audit(pool, 'AVALIACAO_PROCESSADA', req.usuario.id, { avaliacao_id: id }, req);
       res.json(resultados);
-    } catch (e) { res.status(500).json({ erro: 'Erro interno' }); }
+    } catch (e) { console.error('ERRO:', e); res.status(500).json({ erro: e.message }); }
   });
 
   // GET /api/avaliacoes/:id/resultados
@@ -95,7 +95,7 @@ module.exports = (pool) => {
       const contagem = { Baixo: 0, Médio: 0, Alto: 0, Crítico: 0 };
       rows.forEach(r => { if (contagem[r.matriz_risco] !== undefined) contagem[r.matriz_risco]++; });
       res.json({ resultados: rows, contagem });
-    } catch (e) { res.status(500).json({ erro: 'Erro interno' }); }
+    } catch (e) { console.error('ERRO:', e); res.status(500).json({ erro: e.message }); }
   });
 
   return router;
