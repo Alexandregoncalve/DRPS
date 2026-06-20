@@ -66,10 +66,13 @@ export default function Formulario({ token }) {
   const [erroEnvio, setErroEnvio] = useState("");
   const [loading, setLoading] = useState(false);
   const [consentido, setConsentido] = useState(false);
+  const [jaRespondeu, setJaRespondeu] = useState(false);
 
   useEffect(() => {
     fetch(`${API}/responder/${token}`).then(r=>r.json()).then(d=>{
-      if (d.erro) setErro(d.erro); else setAvaliacao(d);
+      if (d.erro === 'jaRespondido') { setJaRespondeu(true); setAvaliacao({}); }
+      else if (d.erro) setErro(d.mensagem || d.erro);
+      else setAvaliacao(d);
     });
   }, [token]);
 
@@ -100,6 +103,15 @@ export default function Formulario({ token }) {
     }
   }
 
+  if (jaRespondeu) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <Card className="p-8 max-w-sm text-center">
+        <div className="text-4xl mb-4">✅</div>
+        <h2 className="font-medium text-gray-900 mb-2">Você já respondeu esta avaliação</h2>
+        <p className="text-sm text-gray-500">Obrigado pela sua participação! Suas respostas já foram registradas com sucesso.</p>
+      </Card>
+    </div>
+  );
   if (erro && !avaliacao) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <Card className="p-8 max-w-sm text-center"><p className="text-red-600 text-sm">{erro}</p></Card>

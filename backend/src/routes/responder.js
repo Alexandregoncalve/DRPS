@@ -26,6 +26,19 @@ module.exports = (pool) => {
       if (aval.status === 'encerrada') return res.status(403).json({ erro: 'Avaliação encerrada' });
       if (aval.data_fim && new Date(aval.data_fim) < new Date()) return res.status(403).json({ erro: 'Prazo encerrado' });
       if (aval.total_funcionarios && aval.vagas_restantes <= 0) return res.status(403).json({ erro: 'Limite atingido' });
+
+      // Checa se este mesmo dispositivo já respondeu, ANTES de exibir o formulário
+      const userAgent = req.headers['user-agent'] || '';
+      const idioma = req.headers['accept-language'] || '';
+      const fingerprintBase = `${req.ip || ''}|${userAgent}|${idioma}`;
+      const ipHash = crypto.createHash('sha256').update(fingerprintBase).digest('hex');
+      const { rows: jaResp } = await pool.query(
+        'SELECT id FROM respostas WHERE avaliacao_id=$1 AND ip_hash=$2 LIMIT 1', [aval.id, ipHash]
+      );
+      if (jaResp.length > 0) {
+        return res.status(409).json({ erro: 'jaRespondido', mensagem: 'Você já respondeu esta avaliação. Obrigado pela sua participação!' });
+      }
+
       res.json(aval);
     } catch (e) { res.status(500).json({ erro: 'Erro interno' }); }
   });
