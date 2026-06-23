@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth, API } from "../../contexts/AuthContext";
 import { Layout } from "../../components/Layout";
 import { Card, Btn, BadgeRisco, BarraProgresso, Alert, Input, Select } from "../../components/ui";
 import CriteriosProbabilidadeModal from "./CriteriosProbabilidadeModal";
+import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from "recharts";
 
 const SETORES_COMUNS = [
   "Administrativo", "Comercial / Vendas", "Financeiro", "Recursos Humanos",
@@ -118,16 +119,34 @@ export default function PainelPrincipal() {
 
   async function verResultados(aval) {
     setAvalSelecionada(aval);
-    const r = await fetch(`${API}/avaliacoes/${aval.id}/resultados`,{headers});
-    const d = await r.json(); setResultados(d);
+    setProcessando(true);
+    setMsg("");
+    try {
+      // Busca resultados existentes
+      const r = await fetch(`${API}/avaliacoes/${aval.id}/resultados`,{headers});
+      const d = await r.json();
 
-    // Inicializa TODOS os 13 tópicos com valor padrão 2 (Média),
-    // mesmo que ainda não tenham sido processados antes
-    const p = {};
-    for (let i = 1; i <= 13; i++) p[i] = 2;
-    d.resultados.forEach(x => { p[x.topico_num] = x.media_probabilidade || 2; });
-    setProbabilidades(p);
+      // Inicializa probabilidades
+      const p = {};
+      for (let i = 1; i <= 13; i++) p[i] = 2;
+      d.resultados?.forEach(x => { p[x.topico_num] = x.media_probabilidade || 2; });
+      setProbabilidades(p);
 
+      // Se já tem respostas, processa automaticamente
+      if (aval.total_respostas > 0) {
+        const probs = Object.entries(p).map(([t,v])=>({topico_num:parseInt(t),valor:parseInt(v)}));
+        await fetch(`${API}/avaliacoes/${aval.id}/probabilidades`,{method:"POST",headers,body:JSON.stringify({probabilidades:probs})});
+        await fetch(`${API}/avaliacoes/${aval.id}/processar`,{method:"POST",headers});
+        const r2 = await fetch(`${API}/avaliacoes/${aval.id}/resultados`,{headers});
+        setResultados(await r2.json());
+      } else {
+        setResultados(d);
+      }
+    } catch(e) {
+      setErro("Erro ao carregar resultados.");
+    } finally {
+      setProcessando(false);
+    }
     setView("resultados");
   }
 
@@ -153,16 +172,155 @@ export default function PainelPrincipal() {
     }
   }
 
+  // helpers semáforo
+  function semaforoMatriz(v) {
+    if (v==='Crítico') return {cor:'bg-red-600 text-white', icone:'🔴', label:'Crítico'};
+    if (v==='Alto')    return {cor:'bg-orange-500 text-white', icone:'🟠', label:'Alto'};
+    if (v==='Médio')   return {cor:'bg-yellow-400 text-gray-900', icone:'🟡', label:'Médio'};
+    if (v==='Baixo')   return {cor:'bg-green-500 text-white', icone:'🟢', label:'Baixo'};
+    return {cor:'bg-gray-200 text-gray-600', icone:'⚪', label:v||'—'};
+  }
+  function semaforoGrav(v) {
+    if (v==='Alta')   return 'text-red-600 font-semibold';
+    if (v==='Média')  return 'text-yellow-600 font-semibold';
+    if (v==='Baixa')  return 'text-green-600 font-semibold';
+    return 'text-gray-400';
+  }
+  function exportarCSV() {
+    if (!resultados?.resultados) return;
+    const rows = [['Tópico','Gravidade','Probabilidade','Matriz de Risco','Fonte Geradora']];
+    resultados.resultados.forEach(r => {
+      rows.push([`"${r.topico_nome}"`, r.classif_gravidade, r.classif_probabilidade, r.matriz_risco, `"${r.fonte_geradora}"`]);
+    });
+    const csv = rows.map(r=>r.join(';')).join('\n');
+    const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url;
+    a.download = `DRPS_${avalSelecionada.empresa_nome}_${avalSelecionada.setor_nome}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
+  function exportarPDF() {
+    if (!resultados?.resultados) return;
+    const linhas = [];
+    const data = new Date().toLocaleDateString('pt-BR');
+    linhas.push('DIAGNÓSTICO DE RISCOS PSICOSSOCIAIS — NR-01');
+    linhas.push('');
+    linhas.push(`Empresa: ${avalSelecionada.empresa_nome}`);
+    linhas.push(`Setor: ${avalSelecionada.setor_nome}`);
+    linhas.push(`Data: ${data}`);
+    linhas.push(`Respostas coletadas: ${avalSelecionada.total_respostas || '—'}`);
+    linhas.push('');
+    linhas.push('RESUMO DA MATRIZ DE RISCO');
+    linhas.push(`Crítico: ${resultados.contagem?.Crítico||0}  |  Alto: ${resultados.contagem?.Alto||0}  |  Médio: ${resultados.contagem?.Médio||0}  |  Baixo: ${resultados.contagem?.Baixo||0}`);
+    linhas.push('');
+    linhas.push('CLASSIFICAÇÃO POR TÓPICO');
+    linhas.push('─'.repeat(80));
+    resultados.resultados.forEach(r => {
+      linhas.push(`${r.topico_nome}`);
+      linhas.push(`  Gravidade: ${r.classif_gravidade}  |  Probabilidade: ${r.classif_probabilidade}  |  Matriz: ${r.matriz_risco}`);
+      linhas.push(`  Fonte: ${r.fonte_geradora}`);
+      if (r.acoes_sugeridas?.length > 0 && (r.matriz_risco==='Alto'||r.matriz_risco==='Crítico')) {
+        linhas.push('  Ações sugeridas:');
+        r.acoes_sugeridas.forEach(a => linhas.push(`    • ${a}`));
+      }
+      linhas.push('');
+    });
+    linhas.push('─'.repeat(80));
+    linhas.push('Documento gerado pelo Sistema DRPS — NeXa Psicossocial');
+    linhas.push(`Gerado em: ${data}`);
+
+    const texto = linhas.join('\n');
+    const blob = new Blob([texto], {type:'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url;
+    a.download = `DRPS_${avalSelecionada.empresa_nome}_${avalSelecionada.setor_nome}_${new Date().toISOString().slice(0,10)}.txt`;
+    a.click(); URL.revokeObjectURL(url);
+    setMsg('📄 Relatório exportado! Abra o .txt e use Ctrl+P para imprimir/salvar como PDF.');
+  }
+
   // ---- VIEW: RESULTADOS ----
-  if (view==="resultados" && avalSelecionada && resultados) return (
+  if (view==="resultados" && avalSelecionada && resultados) {
+    const topRiscos = [...(resultados.resultados||[])].sort((a,b)=>{
+      const ord = {'Crítico':4,'Alto':3,'Médio':2,'Baixo':1};
+      return (ord[b.matriz_risco]||0)-(ord[a.matriz_risco]||0);
+    }).slice(0,5);
+    const topFortes = [...(resultados.resultados||[])].sort((a,b)=>(a.media_gravidade||5)-(b.media_gravidade||5)).slice(0,5);
+    const radarData = (resultados.resultados||[]).map(r=>({
+      topico: r.topico_nome.replace(/^(Baixa |Baixo |Má |Maus |Excesso de |Falta de |Trabalho |Eventos )/,'').slice(0,22),
+      valor: parseFloat(r.media_gravidade)||0,
+    }));
+    const linkAval = `${window.location.origin.replace('8080','8080')}/responder/${avalSelecionada.token_anonimo}`;
+
+    return (
     <Layout titulo="Resultados" subtitulo={`${avalSelecionada.setor_nome} · ${avalSelecionada.empresa_nome}`}
-      acoes={<Btn variant="secondary" onClick={()=>setView("avaliacoes")}>← Voltar</Btn>}>
+      acoes={
+        <div className="flex gap-2">
+          <Btn variant="secondary" onClick={exportarCSV}>⬇ CSV</Btn>
+          <Btn variant="secondary" onClick={exportarPDF}>📄 PDF</Btn>
+          <Btn variant="secondary" onClick={()=>setView("avaliacoes")}>← Voltar</Btn>
+        </div>
+      }>
       {msg && <Alert type="success">{msg}</Alert>}
+
+      {/* SEMÁFORO CONTAGEM */}
       <div className="grid grid-cols-4 gap-3 mb-6">
-        {Object.entries(resultados.contagem).map(([k,v])=>(
-          <Card key={k} className="p-4 text-center"><p className="text-2xl font-semibold text-gray-900">{v}</p><p className="text-xs text-gray-400 mt-1">{k}</p></Card>
+        {[
+          ['Crítico', 'bg-red-700',    'text-white',     'text-red-200'],
+          ['Alto',    'bg-red-400',    'text-white',     'text-red-50'],
+          ['Médio',   'bg-yellow-300', 'text-gray-900',  'text-yellow-800'],
+          ['Baixo',   'bg-green-500',  'text-white',     'text-green-50'],
+        ].map(([k, bg, numCor, labelCor])=>(
+          <div key={k} className={`rounded-xl p-5 text-center ${bg} shadow-sm`}>
+            <p className={`text-4xl font-bold ${numCor}`}>{resultados.contagem?.[k]||0}</p>
+            <p className={`text-sm font-semibold mt-1 ${labelCor}`}>{k}</p>
+          </div>
         ))}
       </div>
+
+      {/* TOP RISCOS + TOP PONTOS FORTES */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <Card className="p-4">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3">🔴 Top 5 Riscos Prioritários</h3>
+          <div className="space-y-2">
+            {topRiscos.map(r=>{
+              const s = semaforoMatriz(r.matriz_risco);
+              return (
+                <div key={r.topico_num} className="flex items-center justify-between">
+                  <span className="text-xs text-gray-700 truncate flex-1 mr-2">{r.topico_nome}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cor}`}>{s.icone} {s.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+        <Card className="p-4">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3">🟢 Top 5 Pontos Fortes</h3>
+          <div className="space-y-2">
+            {topFortes.map(r=>(
+              <div key={r.topico_num} className="flex items-center justify-between">
+                <span className="text-xs text-gray-700 truncate flex-1 mr-2">{r.topico_nome}</span>
+                <span className={`text-xs font-medium ${semaforoGrav(r.classif_gravidade)}`}>{r.classif_gravidade}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      {/* GRÁFICO RADAR */}
+      <Card className="p-4 mb-6">
+        <h3 className="text-sm font-semibold text-gray-800 mb-3">📡 Panorama Geral (Radar)</h3>
+        <ResponsiveContainer width="100%" height={320}>
+          <RadarChart data={radarData}>
+            <PolarGrid />
+            <PolarAngleAxis dataKey="topico" tick={{fontSize:10}}/>
+            <Tooltip formatter={(v)=>[v.toFixed(2),'Gravidade média']}/>
+            <Radar name="Gravidade" dataKey="valor" stroke="#0A2647" fill="#0A2647" fillOpacity={0.25}/>
+          </RadarChart>
+        </ResponsiveContainer>
+      </Card>
+
+      {/* TABELA DETALHADA */}
       <Card className="overflow-hidden mb-4">
         <table className="w-full text-sm">
           <thead><tr className="border-b border-gray-100">
@@ -173,30 +331,77 @@ export default function PainelPrincipal() {
             <th className="px-4 py-3 text-xs text-gray-400 font-medium w-28">Definir prob.</th>
           </tr></thead>
           <tbody>
-            {resultados.resultados.map(r=>(
+            {resultados.resultados.map(r=>{
+              const s = semaforoMatriz(r.matriz_risco);
+              return (
               <tr key={r.topico_num} className="border-b border-gray-50 hover:bg-gray-50">
                 <td className="px-4 py-3 text-xs text-gray-700">{r.topico_nome}</td>
-                <td className="px-4 py-3 text-center"><BadgeRisco valor={r.classif_gravidade}/></td>
-                <td className="px-4 py-3 text-center"><BadgeRisco valor={r.classif_probabilidade}/></td>
-                <td className="px-4 py-3 text-center"><BadgeRisco valor={r.matriz_risco}/></td>
+                <td className="px-4 py-3 text-center"><span className={`text-xs font-medium ${semaforoGrav(r.classif_gravidade)}`}>{r.classif_gravidade}</span></td>
+                <td className="px-4 py-3 text-center"><span className="text-xs text-gray-600">{r.classif_probabilidade}</span></td>
+                <td className="px-4 py-3 text-center"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cor}`}>{s.icone} {s.label}</span></td>
                 <td className="px-4 py-3 text-center">
-                  <div className="flex items-center gap-1.5 justify-center">
+                  <div className="flex flex-col items-center gap-1.5">
                     <select value={probabilidades[r.topico_num]||2}
                       onChange={ev=>setProbabilidades({...probabilidades,[r.topico_num]:ev.target.value})}
-                      className="border border-gray-200 rounded px-2 py-1 text-xs">
+                      className="border border-gray-200 rounded px-2 py-1 text-xs bg-white text-gray-900 w-full">
                       <option value={1}>1 - Baixa</option><option value={2}>2 - Média</option><option value={3}>3 - Alta</option>
                     </select>
                     <button type="button" onClick={()=>setTopicoModalAberto(r)}
-                      title="Responder critérios guiados"
-                      className="text-xs text-blue-600 hover:underline whitespace-nowrap">
-                      📋
+                      className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1 hover:bg-blue-100 w-full whitespace-nowrap">
+                      📋 Critérios
                     </button>
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
+      </Card>
+
+      {/* AÇÕES SUGERIDAS */}
+      {resultados.resultados.filter(r=>r.matriz_risco==='Alto'||r.matriz_risco==='Crítico').length > 0 && (
+        <Card className="p-4 mb-4">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3">⚡ Plano de Ação — Riscos Prioritários</h3>
+          <div className="space-y-4">
+            {resultados.resultados.filter(r=>r.matriz_risco==='Alto'||r.matriz_risco==='Crítico').map(r=>{
+              const s = semaforoMatriz(r.matriz_risco);
+              return (
+                <div key={r.topico_num} className="border-l-4 border-orange-400 pl-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cor}`}>{s.icone} {s.label}</span>
+                    <span className="text-xs font-semibold text-gray-800">{r.topico_nome}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-1">Fonte: {r.fonte_geradora}</p>
+                  {r.acoes_sugeridas?.length > 0 && (
+                    <ul className="text-xs text-gray-700 space-y-0.5 list-disc list-inside">
+                      {r.acoes_sugeridas.map((a,i)=><li key={i}>{a}</li>)}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* QR CODE + LINK */}
+      <Card className="p-4 mb-4">
+        <h3 className="text-sm font-semibold text-gray-800 mb-2">🔗 Link e QR Code da avaliação</h3>
+        <p className="text-xs text-gray-500 mb-3">Compartilhe o link ou QR Code com os colaboradores do setor para responderem anonimamente.</p>
+        <div className="flex items-start gap-4">
+          <div>
+            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(linkAval)}`}
+              alt="QR Code" className="rounded border border-gray-200"/>
+          </div>
+          <div className="flex-1">
+            <p className="text-xs text-gray-500 mb-1">Link direto:</p>
+            <div className="flex gap-2 items-center">
+              <input readOnly value={linkAval} className="text-xs border border-gray-200 rounded px-2 py-1.5 flex-1 bg-gray-50 text-gray-700"/>
+              <Btn variant="secondary" onClick={()=>navigator.clipboard.writeText(linkAval).then(()=>setMsg('✅ Link copiado!'))}>Copiar</Btn>
+            </div>
+          </div>
+        </div>
       </Card>
 
       {topicoModalAberto && (
@@ -219,7 +424,9 @@ export default function PainelPrincipal() {
         </p>
       </div>
     </Layout>
-  );
+    );
+  }
+
 
   return (
     <Layout titulo={isAdmin?"Admin":"Psicólogo"} subtitulo={usuario.crp||""}
@@ -248,7 +455,16 @@ export default function PainelPrincipal() {
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <p className="text-sm font-medium text-gray-900">{a.empresa_nome} · {a.setor_nome}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{new Date(a.criado_em).toLocaleDateString("pt-BR")} · <BadgeRisco valor={a.status}/></p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        📅 Aberta em: {new Date(a.criado_em).toLocaleDateString("pt-BR")}
+                        {a.data_fim && (
+                          <span className={`ml-2 font-medium ${new Date(a.data_fim) < new Date() ? 'text-red-500' : 'text-amber-600'}`}>
+                            · ⏱ Limite: {new Date(a.data_fim).toLocaleDateString("pt-BR")}
+                            {new Date(a.data_fim) < new Date() && ' (encerrada)'}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5"><BadgeRisco valor={a.status}/></p>
                     </div>
                     <Btn variant="ghost" onClick={()=>verResultados(a)} className="text-xs">Ver resultados</Btn>
                   </div>

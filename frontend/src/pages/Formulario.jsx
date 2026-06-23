@@ -56,17 +56,24 @@ const PERGUNTAS = [
   {num:51,texto:"A ausência de convívio presencial já afetou negativamente seu bem-estar emocional?"},
   {num:52,texto:"Você consegue se desconectar do trabalho fora do horário, mesmo trabalhando remotamente?"},
 ];
-const ESCALA = [{valor:1,label:"Nunca"},{valor:2,label:"Raramente"},{valor:3,label:"Às vezes"},{valor:4,label:"Frequentemente"},{valor:5,label:"Sempre"}];
+
+const ESCALA = [
+  {valor:1,label:"Nunca"},
+  {valor:2,label:"Raramente"},
+  {valor:3,label:"Às vezes"},
+  {valor:4,label:"Frequentemente"},
+  {valor:5,label:"Sempre"}
+];
 
 export default function Formulario({ token }) {
   const [avaliacao, setAvaliacao] = useState(null);
   const [respostas, setRespostas] = useState({});
   const [enviado, setEnviado] = useState(false);
   const [erro, setErro] = useState("");
+  const [jaRespondeu, setJaRespondeu] = useState(false);
   const [erroEnvio, setErroEnvio] = useState("");
   const [loading, setLoading] = useState(false);
   const [consentido, setConsentido] = useState(false);
-  const [jaRespondeu, setJaRespondeu] = useState(false);
 
   useEffect(() => {
     fetch(`${API}/responder/${token}`).then(r=>r.json()).then(d=>{
@@ -79,127 +86,224 @@ export default function Formulario({ token }) {
   async function enviar(e) {
     e.preventDefault();
     if (Object.keys(respostas).length < 52) {
-      setErroEnvio("Por favor, responda todas as perguntas.");
+      setErroEnvio("Por favor, responda todas as perguntas antes de enviar.");
       const naoResp = PERGUNTAS.filter(p=>!respostas[p.num]);
-      if (naoResp.length>0) { const el=document.getElementById(`p-${naoResp[0].num}`); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); }
+      if (naoResp.length>0) {
+        const el = document.getElementById(`p-${naoResp[0].num}`);
+        if (el) el.scrollIntoView({behavior:'smooth', block:'center'});
+      }
       return;
     }
     setErroEnvio(""); setLoading(true);
     try {
       const lista = Object.entries(respostas).map(([pn,vo])=>({pergunta_num:parseInt(pn),valor_original:parseInt(vo)}));
-      const r = await fetch(`${API}/responder/${token}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({respostas:lista})});
+      const r = await fetch(`${API}/responder/${token}`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({respostas:lista})
+      });
       const d = await r.json();
       if (r.ok && d.ok) {
         setEnviado(true);
+        window.scrollTo({top:0, behavior:'smooth'});
       } else {
         setErroEnvio(d.erro || "Não foi possível enviar suas respostas. Tente novamente.");
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        window.scrollTo({top:0, behavior:'smooth'});
       }
-    } catch (e) {
+    } catch {
       setErroEnvio("Erro de conexão. Verifique sua internet e tente novamente.");
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({top:0, behavior:'smooth'});
     } finally {
       setLoading(false);
     }
   }
 
+  // ---- JÁ RESPONDEU ----
   if (jaRespondeu) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <Card className="p-8 max-w-sm text-center">
-        <div className="text-4xl mb-4">✅</div>
-        <h2 className="font-medium text-gray-900 mb-2">Você já respondeu esta avaliação</h2>
-        <p className="text-sm text-gray-500">Obrigado pela sua participação! Suas respostas já foram registradas com sucesso.</p>
-      </Card>
-    </div>
-  );
-  if (erro && !avaliacao) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <Card className="p-8 max-w-sm text-center"><p className="text-red-600 text-sm">{erro}</p></Card>
-    </div>
-  );
-  if (!avaliacao) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><p className="text-gray-400 text-sm">Carregando...</p></div>;
-  if (enviado) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <Card className="p-8 max-w-sm text-center">
-        <div className="text-4xl mb-4">✅</div>
-        <h2 className="font-medium text-gray-900 mb-2">Respostas enviadas!</h2>
-        <p className="text-sm text-gray-500">Obrigado pela participação. Suas respostas são anônimas.</p>
-      </Card>
-    </div>
-  );
-  if (!consentido) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <Card className="p-8 max-w-md">
-        <h2 className="font-semibold text-gray-900 mb-1">Avaliação de Riscos Psicossociais</h2>
-        <p className="text-sm text-gray-500 mb-4">{avaliacao.empresa_nome} · {avaliacao.setor_nome}</p>
-        <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-800 mb-4 space-y-2">
-          <p><strong>Antes de começar:</strong></p>
-          <p>• Suas respostas são <strong>completamente anônimas</strong></p>
-          <p>• Resultados analisados de forma <strong>agregada por setor</strong></p>
-          <p>• Pesquisa voluntária conforme <strong>NR-01 e LGPD</strong></p>
-          <p>• Dados usados exclusivamente para <strong>diagnóstico organizacional</strong></p>
-        </div>
-        <Btn onClick={()=>setConsentido(true)} className="w-full justify-center">Entendi e desejo participar</Btn>
-      </Card>
+      <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
+        <div className="text-6xl mb-4">✅</div>
+        <h2 className="text-xl font-bold text-gray-900 mb-3">Você já participou!</h2>
+        <p className="text-base text-gray-600 mb-6 leading-relaxed">
+          Suas respostas já foram registradas com sucesso. Obrigado pela sua participação!
+        </p>
+        <button onClick={()=>window.close()}
+          className="w-full bg-gray-800 text-white rounded-xl py-4 text-base font-semibold">
+          Fechar
+        </button>
+      </div>
     </div>
   );
 
+  // ---- ERRO ----
+  if (erro && !avaliacao) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
+        <div className="text-5xl mb-4">⚠️</div>
+        <h2 className="text-xl font-bold text-gray-900 mb-3">Link indisponível</h2>
+        <p className="text-base text-gray-500">{erro}</p>
+      </div>
+    </div>
+  );
+
+  // ---- CARREGANDO ----
+  if (!avaliacao) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <p className="text-gray-400 text-base">Carregando questionário...</p>
+    </div>
+  );
+
+  // ---- ENVIADO ----
+  if (enviado) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
+        <div className="text-6xl mb-4">🎉</div>
+        <h2 className="text-xl font-bold text-gray-900 mb-3">Respostas enviadas!</h2>
+        <p className="text-base text-gray-600 mb-2 leading-relaxed">
+          Obrigado pela sua participação. Suas respostas são completamente anônimas e serão analisadas de forma agregada.
+        </p>
+        <p className="text-sm text-gray-400 mb-8">
+          Sua contribuição é muito importante para melhorar o ambiente de trabalho.
+        </p>
+        <button onClick={()=>window.close()}
+          className="w-full bg-green-600 text-white rounded-xl py-4 text-base font-semibold hover:bg-green-700">
+          ✓ Fechar esta página
+        </button>
+      </div>
+    </div>
+  );
+
+  // ---- CONSENTIMENTO ----
+  if (!consentido) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="bg-white rounded-2xl shadow-lg p-6 max-w-lg w-full">
+        <div className="text-center mb-6">
+          <div className="text-5xl mb-3">🔒</div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-1">Avaliação de Riscos Psicossociais</h2>
+          <p className="text-base text-gray-500">{avaliacao.empresa_nome} · {avaliacao.setor_nome}</p>
+        </div>
+        <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 mb-6 space-y-3">
+          <p className="text-base font-semibold text-blue-900">Antes de começar, saiba que:</p>
+          <div className="space-y-2">
+            <div className="flex items-start gap-3">
+              <span className="text-xl">👤</span>
+              <p className="text-base text-blue-800">Suas respostas são <strong>completamente anônimas</strong> — não coletamos seu nome, e-mail ou qualquer dado de identificação.</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="text-xl">📊</span>
+              <p className="text-base text-blue-800">Os resultados são analisados de forma <strong>agregada por setor</strong>, nunca individualmente.</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="text-xl">📋</span>
+              <p className="text-base text-blue-800">Esta pesquisa é <strong>voluntária</strong> e segue as normas da <strong>NR-01 e LGPD</strong>.</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="text-xl">🎯</span>
+              <p className="text-base text-blue-800">Os dados são usados exclusivamente para <strong>melhorar o ambiente de trabalho</strong> da sua empresa.</p>
+            </div>
+          </div>
+        </div>
+        <button onClick={()=>setConsentido(true)}
+          className="w-full bg-blue-600 text-white rounded-xl py-4 text-lg font-bold hover:bg-blue-700 transition-colors">
+          Entendi e quero participar →
+        </button>
+        <p className="text-center text-xs text-gray-400 mt-3">Tempo estimado: 5 a 10 minutos</p>
+      </div>
+    </div>
+  );
+
+  // ---- QUESTIONÁRIO ----
   const respondidas = Object.keys(respostas).length;
   const vagasRestantes = avaliacao.total_funcionarios ? avaliacao.vagas_restantes : null;
+  const pct = Math.round((respondidas/52)*100);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
+      {/* HEADER STICKY */}
+      <header className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto">
-          <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="text-sm font-medium text-gray-900">{avaliacao.empresa_nome}</p>
-              <p className="text-xs text-gray-400">{avaliacao.setor_nome} · Anônimo · {respondidas}/52</p>
+              <p className="text-base font-bold text-gray-900">{avaliacao.empresa_nome}</p>
+              <p className="text-sm text-gray-500">{avaliacao.setor_nome} · Anônimo</p>
             </div>
-            {vagasRestantes!==null && (
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${vagasRestantes>0?"bg-green-100 text-green-700":"bg-red-100 text-red-700"}`}>
-                {vagasRestantes>0?`${vagasRestantes} vagas`:"Esgotado"}
+            <div className="text-right">
+              <span className={`text-sm font-bold ${respondidas===52?'text-green-600':'text-blue-600'}`}>
+                {respondidas}/52
               </span>
-            )}
+              {vagasRestantes!==null && (
+                <p className={`text-xs ${vagasRestantes>0?"text-green-600":"text-red-600"}`}>
+                  {vagasRestantes>0?`${vagasRestantes} vagas restantes`:"Limite atingido"}
+                </p>
+              )}
+            </div>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-1">
-            <div className="bg-blue-500 h-1 rounded-full transition-all" style={{width:`${(respondidas/52)*100}%`}}/>
+          {/* BARRA DE PROGRESSO */}
+          <div className="w-full bg-gray-100 rounded-full h-2">
+            <div className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+              style={{width:`${pct}%`}}/>
           </div>
+          {pct > 0 && <p className="text-xs text-gray-400 mt-1 text-right">{pct}% concluído</p>}
         </div>
       </header>
-      <form onSubmit={enviar} className="max-w-2xl mx-auto p-4 space-y-3">
+
+      {/* FORMULÁRIO */}
+      <form onSubmit={enviar} className="max-w-2xl mx-auto p-4 space-y-4 pb-8">
         {erroEnvio && (
-          <div className="bg-red-50 border border-red-300 rounded-lg p-4 text-sm text-red-800 font-medium">
+          <div className="bg-red-50 border border-red-300 rounded-xl p-4 text-base text-red-800 font-medium">
             ⚠️ {erroEnvio}
           </div>
         )}
+
         {PERGUNTAS.map((p,i)=>{
           const naoResp = erroEnvio && !respostas[p.num];
+          const respondida = !!respostas[p.num];
           return (
             <div id={`p-${p.num}`} key={p.num}
-              className={`bg-white rounded-xl border p-4 transition-all ${naoResp?"border-red-400 bg-red-50":"border-gray-200"}`}>
-              <p className="text-base font-bold text-gray-900 mb-3">
-                <span className="text-xs text-gray-400 mr-2 font-normal">{i+1}.</span>{p.texto}
-                {naoResp && <span className="ml-1 text-xs text-red-500">*</span>}
+              className={`bg-white rounded-2xl border-2 p-5 transition-all ${
+                naoResp ? "border-red-400 bg-red-50" :
+                respondida ? "border-green-200" : "border-gray-200"
+              }`}>
+              {/* NÚMERO + PERGUNTA */}
+              <p className="text-base font-bold text-gray-900 mb-4 leading-snug">
+                <span className="text-sm font-normal text-gray-400 mr-2">{i+1}.</span>
+                {p.texto}
+                {naoResp && <span className="ml-1 text-sm text-red-500 font-normal">* obrigatória</span>}
               </p>
-              <div className="flex gap-2">
+              {/* OPÇÕES — empilhadas no celular */}
+              <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
                 {ESCALA.map(op=>(
-                  <label key={op.valor} className={`flex-1 cursor-pointer rounded-lg border text-center py-2 px-1 text-xs transition-all
-                    ${respostas[p.num]==op.valor?"border-blue-500 bg-blue-50 text-blue-800 font-medium":"border-gray-200 text-gray-500 hover:border-gray-300"}`}>
+                  <label key={op.valor}
+                    className={`cursor-pointer rounded-xl border-2 text-center py-3 px-1 transition-all select-none
+                      ${respostas[p.num]==op.valor
+                        ? "border-blue-500 bg-blue-500 text-white font-bold shadow-sm"
+                        : "border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50"
+                      }`}>
                     <input type="radio" name={`p${p.num}`} value={op.valor}
-                      onChange={()=>{ setRespostas({...respostas,[p.num]:op.valor}); if(erroEnvio) setErroEnvio(""); }} className="sr-only"/>
-                    <span className="block font-medium">{op.valor}</span>
-                    <span className="text-xs">{op.label}</span>
+                      onChange={()=>{ setRespostas({...respostas,[p.num]:op.valor}); if(erroEnvio) setErroEnvio(""); }}
+                      className="sr-only"/>
+                    <span className="block text-lg font-bold">{op.valor}</span>
+                    <span className="text-xs leading-tight">{op.label}</span>
                   </label>
                 ))}
               </div>
             </div>
           );
         })}
-        <button type="submit" disabled={loading}
-          className="w-full bg-blue-600 text-white rounded-xl py-3 font-medium hover:bg-blue-700 disabled:opacity-50">
-          {loading?"Enviando...":respondidas<52?`Enviar (${respondidas}/52)`:"Enviar respostas"}
-        </button>
+
+        {/* BOTÃO ENVIAR */}
+        <div className="sticky bottom-4">
+          <button type="submit" disabled={loading}
+            className={`w-full rounded-xl py-5 text-lg font-bold shadow-lg transition-all
+              ${respondidas===52
+                ? "bg-green-600 hover:bg-green-700 text-white"
+                : "bg-blue-600 hover:bg-blue-700 text-white"
+              } disabled:opacity-50`}>
+            {loading ? "Enviando suas respostas..." :
+              respondidas===52 ? "✓ Enviar todas as respostas" :
+              `Responder (${respondidas}/52 — faltam ${52-respondidas})`}
+          </button>
+        </div>
       </form>
     </div>
   );

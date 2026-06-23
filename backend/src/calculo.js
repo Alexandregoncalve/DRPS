@@ -23,19 +23,58 @@ const LOGICA_PERGUNTAS = {
 
 // Perguntas por tópico
 const TOPICOS = [
-  { num: 1,  nome: 'Assédio de qualquer natureza no trabalho',          perguntas: [1,2,3,4,5],    fonte: 'Cultura permissiva a desrespeito; ausência de canal de denúncia; liderança despreparada.' },
-  { num: 2,  nome: 'Falta de suporte/apoio no trabalho',                perguntas: [6,7,8,9,10],   fonte: 'Liderança ausente; falta de escuta; cobrança sem acompanhamento; RH pouco atuante.' },
-  { num: 3,  nome: 'Má gestão de mudanças organizacionais',             perguntas: [11,12,13,14],  fonte: 'Comunicação inadequada; mudanças abruptas; falta de planejamento.' },
-  { num: 4,  nome: 'Baixa clareza de papel/função',                     perguntas: [15,16,17,18],  fonte: 'Falta de definição de responsabilidades; ordens contraditórias; comunicação confusa.' },
-  { num: 5,  nome: 'Baixas recompensas e reconhecimento',               perguntas: [19,20,21],     fonte: 'Ausência de feedback; foco exclusivo em metas; reconhecimento desigual.' },
-  { num: 6,  nome: 'Baixo controle no trabalho / Falta de autonomia',   perguntas: [22,23,24,25],  fonte: 'Microgestão; excesso de burocracia; centralização de decisões.' },
-  { num: 7,  nome: 'Baixa justiça organizacional',                      perguntas: [26,27,28,29],  fonte: 'Critérios pouco transparentes; favorecimento; desigualdade de tratamento.' },
-  { num: 8,  nome: 'Eventos violentos ou traumáticos',                  perguntas: [30,31,32],     fonte: 'Falta de protocolos de segurança; ausência de treinamento; falta de suporte pós-evento.' },
-  { num: 9,  nome: 'Baixa demanda no trabalho (Subcarga)',              perguntas: [33,34,35,36],  fonte: 'Subutilização de competências; ociosidade; má distribuição de tarefas.' },
-  { num: 10, nome: 'Excesso de demandas no trabalho (Sobrecarga)',      perguntas: [37,38,39,40],  fonte: 'Metas irrealistas; equipe insuficiente; jornadas prolongadas; acúmulo de funções.' },
-  { num: 11, nome: 'Maus relacionamentos no local de trabalho',         perguntas: [41,42,43],     fonte: 'Comunicação agressiva; rivalidade interna; conflitos mal geridos.' },
-  { num: 12, nome: 'Trabalho em condições de difícil comunicação',      perguntas: [44,45,46,47],  fonte: 'Turnos desalinhados; distância física; falha nos meios de comunicação.' },
-  { num: 13, nome: 'Trabalho remoto e isolado',                         perguntas: [48,49,50,51,52], fonte: 'Isolamento social; falta de acompanhamento; comunicação exclusivamente digital.' },
+  { num: 1,  nome: 'Assédio de qualquer natureza no trabalho',
+    perguntas: [1,2,3,4,5],
+    fonte: 'Cultura permissiva a desrespeito; ausência de canal de denúncia; liderança despreparada.',
+    acoes: ['Implantar canal de denúncias anônimo', 'Treinar lideranças em prevenção ao assédio', 'Revisar política de conduta e comunicar a todos', 'Criar comitê de ética e clima organizacional'] },
+  { num: 2,  nome: 'Falta de suporte/apoio no trabalho',
+    perguntas: [6,7,8,9,10],
+    fonte: 'Liderança ausente; falta de escuta; cobrança sem acompanhamento; RH pouco atuante.',
+    acoes: ['Implantar reuniões de 1:1 entre líderes e equipes', 'Capacitar gestores em escuta ativa e feedback', 'Criar canais de apoio psicológico acessíveis', 'Revisar práticas de acompanhamento do RH'] },
+  { num: 3,  nome: 'Má gestão de mudanças organizacionais',
+    perguntas: [11,12,13,14],
+    fonte: 'Comunicação inadequada; mudanças abruptas; falta de planejamento.',
+    acoes: ['Criar protocolo de comunicação para mudanças', 'Envolver equipes no planejamento de mudanças', 'Oferecer suporte psicológico em períodos de transição', 'Estabelecer cronogramas claros e acompanhamento'] },
+  { num: 4,  nome: 'Baixa clareza de papel/função',
+    perguntas: [15,16,17,18],
+    fonte: 'Falta de definição de responsabilidades; ordens contraditórias; comunicação confusa.',
+    acoes: ['Revisar e documentar descrições de cargos', 'Alinhar expectativas em reuniões periódicas de equipe', 'Eliminar sobreposição de funções e ordens conflitantes', 'Implantar gestão por objetivos (OKR ou equivalente)'] },
+  { num: 5,  nome: 'Baixas recompensas e reconhecimento',
+    perguntas: [19,20,21],
+    fonte: 'Ausência de feedback; foco exclusivo em metas; reconhecimento desigual.',
+    acoes: ['Implantar programa estruturado de reconhecimento', 'Capacitar líderes para dar feedback construtivo regular', 'Revisar política de benefícios e remuneração variável', 'Criar rituais de celebração de conquistas da equipe'] },
+  { num: 6,  nome: 'Baixo controle no trabalho / Falta de autonomia',
+    perguntas: [22,23,24,25],
+    fonte: 'Microgestão; excesso de burocracia; centralização de decisões.',
+    acoes: ['Mapear e eliminar processos burocráticos desnecessários', 'Delegar decisões operacionais para as equipes', 'Treinar líderes para reduzir microgestão', 'Implantar gestão participativa com metas coletivas'] },
+  { num: 7,  nome: 'Baixa justiça organizacional',
+    perguntas: [26,27,28,29],
+    fonte: 'Critérios pouco transparentes; favorecimento; desigualdade de tratamento.',
+    acoes: ['Tornar critérios de promoção e avaliação públicos', 'Auditar processos seletivos internos para garantir equidade', 'Implantar política clara de desligamentos e transferências', 'Criar canal seguro para relatar percepções de injustiça'] },
+  { num: 8,  nome: 'Eventos violentos ou traumáticos',
+    perguntas: [30,31,32],
+    fonte: 'Falta de protocolos de segurança; ausência de treinamento; falta de suporte pós-evento.',
+    acoes: ['Desenvolver protocolo de resposta a incidentes críticos', 'Oferecer apoio psicológico imediato após eventos traumáticos', 'Treinar equipes em gestão de crises e primeiros socorros psicológicos', 'Realizar debriefing estruturado após ocorrências graves'] },
+  { num: 9,  nome: 'Baixa demanda no trabalho (Subcarga)',
+    perguntas: [33,34,35,36],
+    fonte: 'Subutilização de competências; ociosidade; má distribuição de tarefas.',
+    acoes: ['Redistribuir tarefas para equilibrar a carga de trabalho', 'Identificar e aproveitar competências subutilizadas', 'Criar programas de desenvolvimento e capacitação internos', 'Revisar estrutura de cargos e responsabilidades'] },
+  { num: 10, nome: 'Excesso de demandas no trabalho (Sobrecarga)',
+    perguntas: [37,38,39,40],
+    fonte: 'Metas irrealistas; equipe insuficiente; jornadas prolongadas; acúmulo de funções.',
+    acoes: ['Revisar metas e prazos com base em capacidade real da equipe', 'Avaliar necessidade de contratação ou redistribuição', 'Implantar política de desconexão digital fora do horário', 'Monitorar horas extras e intervir preventivamente'] },
+  { num: 11, nome: 'Maus relacionamentos no local de trabalho',
+    perguntas: [41,42,43],
+    fonte: 'Comunicação agressiva; rivalidade interna; conflitos mal geridos.',
+    acoes: ['Implantar programa de mediação de conflitos', 'Treinar equipes em comunicação não-violenta', 'Criar espaços estruturados de escuta e diálogo entre pares', 'Promover atividades de integração e construção de equipe'] },
+  { num: 12, nome: 'Trabalho em condições de difícil comunicação',
+    perguntas: [44,45,46,47],
+    fonte: 'Turnos desalinhados; distância física; falha nos meios de comunicação.',
+    acoes: ['Padronizar canais e protocolos de comunicação interna', 'Garantir sobreposição de turnos para alinhamento de equipes', 'Investir em ferramentas adequadas de comunicação remota', 'Criar rituais de alinhamento entre turnos e unidades'] },
+  { num: 13, nome: 'Trabalho remoto e isolado',
+    perguntas: [48,49,50,51,52],
+    fonte: 'Isolamento social; falta de acompanhamento; comunicação exclusivamente digital.',
+    acoes: ['Estabelecer rotina de check-ins regulares com trabalhadores remotos', 'Promover encontros presenciais periódicos da equipe', 'Criar comunidades virtuais de suporte e convivência', 'Oferecer suporte psicológico específico para trabalhadores remotos'] },
 ];
 
 // Aplica lógica direta ou invertida
@@ -47,8 +86,7 @@ function calcularPontuacaoCorrigida(perguntaNum, valorOriginal) {
 }
 
 // Classifica gravidade com base na pontuação corrigida
-// Escala de respostas: 1 a 5 (Nunca/Raramente/Às vezes/Frequentemente/Sempre)
-// Cortes em terços iguais da escala, mesma proporção da planilha original (que usava 1-3):
+// Escala 1-5: cortes em terços iguais
 // 1.00–2.33 Baixa | 2.34–3.66 Média | 3.67–5.00 Alta
 function classificarGravidade(media) {
   if (media >= 3.67) return 'Alta';
@@ -118,6 +156,7 @@ function calcularResultados(respostas, probabilidades) {
       classif_probabilidade: classifProb,
       matriz_risco: matrizRisco,
       fonte_geradora: topico.fonte,
+      acoes_sugeridas: topico.acoes || [],
     };
   });
 }
