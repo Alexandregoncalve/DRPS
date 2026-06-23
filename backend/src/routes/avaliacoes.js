@@ -108,10 +108,10 @@ module.exports = (pool) => {
       let empresaFiltro = '';
       let params = [];
       if (papel === 'gestor_matriz') {
-        empresaFiltro = 'WHERE (e.id = $1 OR e.matriz_id = $1) AND a.status = \'processada\'';
+        empresaFiltro = 'WHERE (e.id = $1 OR e.matriz_id = $1) AND a.status IN (\'processada\', \'coletada\')';
         params = [empresa_vinculada_id];
       } else {
-        empresaFiltro = 'WHERE a.status = \'processada\'';
+        empresaFiltro = 'WHERE a.status IN (\'processada\', \'coletada\')';
       }
 
       const { rows: avaliacoes } = await pool.query(`
@@ -201,6 +201,138 @@ module.exports = (pool) => {
 
       res.json(resultado);
     } catch (e) { console.error(e); res.status(500).json({ erro: e.message }); }
+  });
+
+  // GET /api/avaliacoes/consolidado/laudo-empresa/:empresa_id — laudo consolidado de todos os setores de uma empresa
+  router.get('/consolidado/laudo-empresa/:empresa_id', autenticar, exigirPapel('admin','psicologo','gestor_matriz','gestor_filial'), async (req, res) => {
+    try {
+      const { empresa_id } = req.params;
+      const { rows } = await pool.query(`
+        SELECT r.topico_num, r.topico_nome, r.fonte_geradora,
+          r.media_gravidade, r.classif_gravidade,
+          r.media_probabilidade, r.classif_probabilidade, r.matriz_risco,
+          s.nome as setor_nome, e.nome as empresa_nome
+        FROM resultados r
+        JOIN avaliacoes a ON r.avaliacao_id = a.id
+        JOIN setores s ON a.setor_id = s.id
+        JOIN empresas e ON s.empresa_id = e.id
+        WHERE e.id = $1 AND a.status IN ('processada', 'coletada')
+        ORDER BY r.topico_num
+      `, [empresa_id]);
+
+      if (!rows.length) return res.status(404).json({ erro: 'Nenhum resultado encontrado para esta empresa' });
+
+      // Ordena por risco (pior primeiro) para pegar o pior resultado por tópico
+      const ordemRisco = { 'Crítico': 4, 'Alto': 3, 'Médio': 2, 'Baixo': 1, 'Pendente': 0 };
+      const ordemGrav  = { 'Alta': 3, 'Média': 2, 'Baixa': 1 };
+      const ordemProb  = { 'Alta': 3, 'Média': 2, 'Baixa': 1 };
+
+      const porTopico = {};
+      rows.forEach(r => {
+        const atual = porTopico[r.topico_num];
+        const novoRisco = ordemRisco[r.matriz_risco] || 0;
+        // Guarda o pior resultado deste tópico entre todos os setores
+        if (!atual || novoRisco > (ordemRisco[atual.matriz_risco] || 0)) {
+          porTopico[r.topico_num] = { ...r, setores_alto: [], setores_todos: [] };
+        }
+        if (!porTopico[r.topico_num].setores_todos) porTopico[r.topico_num].setores_todos = [];
+        porTopico[r.topico_num].setores_todos.push(r.setor_nome);
+        if (r.matriz_risco === 'Alto' || r.matriz_risco === 'Crítico') {
+          if (!porTopico[r.topico_num].setores_alto) porTopico[r.topico_num].setores_alto = [];
+          porTopico[r.topico_num].setores_alto.push(r.setor_nome);
+        }
+      });
+
+      // Monta resultado final com info de quantos setores afetados
+      const resultados = Object.values(porTopico).map(t => ({
+        topico_num: t.topico_num,
+        topico_nome: t.topico_nome,
+        fonte_geradora: t.fonte_geradora,
+        empresa_nome: t.empresa_nome,
+        media_gravidade: parseFloat(t.media_gravidade) || null,
+        classif_gravidade: t.classif_gravidade,
+        media_probabilidade: parseFloat(t.media_probabilidade) || null,
+        classif_probabilidade: t.classif_probabilidade,
+        matriz_risco: t.matriz_risco,
+        setores_incluidos: [...new Set(t.setores_todos || [])],
+        setores_em_risco: [...new Set(t.setores_alto || [])],
+        acoes_sugeridas: [],
+      }));
+
+      const contagem = { Baixo:0, Médio:0, Alto:0, Crítico:0 };
+      resultados.forEach(r => { if (contagem[r.matriz_risco]!==undefined) contagem[r.matriz_risco]++; });
+
+      res.json({
+        empresa_nome: rows[0].empresa_nome,
+        total_setores: new Set(rows.map(r=>r.setor_nome)).size,
+        resultados, contagem
+      });
+    } catch(e) { console.error(e); res.status(500).json({ erro: e.message }); }
+  });
+
+  // GET /api/avaliacoes/consolidado/laudo-rede — laudo geral de toda a rede (pior resultado por tópico)
+  router.get('/consolidado/laudo-rede', autenticar, exigirPapel('admin','psicologo','gestor_matriz'), async (req, res) => {
+    const { papel, empresa_vinculada_id } = req.usuario;
+    try {
+      let filtro = 'WHERE a.status IN (\'processada\', \'coletada\')';
+      let params = [];
+      if (papel === 'gestor_matriz') {
+        filtro = 'WHERE a.status IN (\'processada\', \'coletada\') AND (e.id = $1 OR e.matriz_id = $1)';
+        params = [empresa_vinculada_id];
+      }
+
+      const { rows } = await pool.query(`
+        SELECT r.topico_num, r.topico_nome, r.fonte_geradora,
+          r.media_gravidade, r.classif_gravidade,
+          r.media_probabilidade, r.classif_probabilidade, r.matriz_risco,
+          s.nome as setor_nome, e.nome as empresa_nome, e.id as empresa_id
+        FROM resultados r
+        JOIN avaliacoes a ON r.avaliacao_id = a.id
+        JOIN setores s ON a.setor_id = s.id
+        JOIN empresas e ON s.empresa_id = e.id
+        ${filtro}
+        ORDER BY r.topico_num
+      `, params);
+
+      if (!rows.length) return res.status(404).json({ erro: 'Nenhum resultado encontrado' });
+
+      const ordemRisco = { 'Crítico': 4, 'Alto': 3, 'Médio': 2, 'Baixo': 1, 'Pendente': 0 };
+
+      const porTopico = {};
+      rows.forEach(r => {
+        const atual = porTopico[r.topico_num];
+        const novoRisco = ordemRisco[r.matriz_risco] || 0;
+        if (!atual || novoRisco > (ordemRisco[atual.matriz_risco] || 0)) {
+          porTopico[r.topico_num] = { ...r, setores_em_risco: [], empresas_incluidas: [] };
+        }
+        if (!porTopico[r.topico_num].empresas_incluidas) porTopico[r.topico_num].empresas_incluidas = [];
+        porTopico[r.topico_num].empresas_incluidas.push(`${r.empresa_nome} — ${r.setor_nome}`);
+        if (r.matriz_risco === 'Alto' || r.matriz_risco === 'Crítico') {
+          if (!porTopico[r.topico_num].setores_em_risco) porTopico[r.topico_num].setores_em_risco = [];
+          porTopico[r.topico_num].setores_em_risco.push(`${r.empresa_nome} — ${r.setor_nome}`);
+        }
+      });
+
+      const resultados = Object.values(porTopico).map(t => ({
+        topico_num: t.topico_num,
+        topico_nome: t.topico_nome,
+        fonte_geradora: t.fonte_geradora,
+        media_gravidade: parseFloat(t.media_gravidade) || null,
+        classif_gravidade: t.classif_gravidade,
+        media_probabilidade: parseFloat(t.media_probabilidade) || null,
+        classif_probabilidade: t.classif_probabilidade,
+        matriz_risco: t.matriz_risco,
+        empresas_incluidas: [...new Set(t.empresas_incluidas || [])],
+        setores_em_risco: [...new Set(t.setores_em_risco || [])],
+        acoes_sugeridas: [],
+      }));
+
+      const contagem = { Baixo:0, Médio:0, Alto:0, Crítico:0 };
+      resultados.forEach(r => { if (contagem[r.matriz_risco]!==undefined) contagem[r.matriz_risco]++; });
+
+      const empresas = [...new Set(rows.map(r=>r.empresa_nome))];
+      res.json({ empresas, total_empresas: empresas.length, resultados, contagem });
+    } catch(e) { console.error(e); res.status(500).json({ erro: e.message }); }
   });
 
   // GET /api/avaliacoes/criterios-probabilidade — lista as perguntas guiadas

@@ -466,6 +466,7 @@ function DashboardFilial({ headers }) {
 // DASHBOARD GESTOR MATRIZ
 // ============================================================
 function DashboardMatriz({ headers }) {
+  const { usuario } = useAuth();
   const [dados, setDados] = useState(null);
   const [loading, setLoading] = useState(true);
   const [empresaSel, setEmpresaSel] = useState(null);
@@ -512,8 +513,20 @@ function DashboardMatriz({ headers }) {
       )}
 
       {/* SEMÁFORO CONSOLIDADO DA FILIAL */}
-      <Card className="p-4 mb-6">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">📊 Resumo consolidado — {empresaSel.empresa_nome}</h3>
+      <Card className="p-4 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-700">📊 Resumo consolidado — {empresaSel.empresa_nome}</h3>
+          <Btn variant="primary" onClick={async()=>{
+            setCarregandoLaudo(true);
+            const r = await fetch(`${API}/avaliacoes/consolidado/laudo-empresa/${empresaSel.empresa_id}`, { headers });
+            const d = await r.json();
+            setAvalSel({ empresa_nome: empresaSel.empresa_nome, setor_nome: `Consolidado — ${d.total_setores} setor(es)`, total_respostas: avaliacoes.reduce((a,b)=>a+(parseInt(b.total_respostas)||0),0) });
+            setResultados(d);
+            setCarregandoLaudo(false);
+          }}>
+            📄 Laudo consolidado da filial
+          </Btn>
+        </div>
         <div className="grid grid-cols-4 gap-3">
           {SEMAFORO_CARDS.map(([k,bg,tc,lc])=>(
             <SemaforoCard key={k} label={k} valor={empresaSel.totais?.[k]||0} bg={bg} textCor={tc} labelCor={lc}/>
@@ -566,12 +579,35 @@ function DashboardMatriz({ headers }) {
         <>
           {/* TOTAIS GERAIS */}
           <Card className="p-4 mb-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">📊 Consolidado Geral — Todas as Filiais</h3>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">📊 Consolidado Geral — Todas as Filiais</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Soma de todos os resultados de todos os setores e filiais</p>
+              </div>
+              <Btn variant="primary" onClick={async()=>{
+                setLoading(true);
+                const r = await fetch(`${API}/avaliacoes/consolidado/laudo-rede`, { headers });
+                const d = await r.json();
+                if (d.erro) { setLoading(false); return; }
+                setAvalSel({
+                  empresa_nome: 'Rede Completa',
+                  setor_nome: `Média consolidada de ${d.total_empresas} empresa(s) — 13 fatores de risco`,
+                  total_respostas: '—'
+                });
+                setResultados(d);
+                setLoading(false);
+              }}>
+                📄 Laudo consolidado da rede
+              </Btn>
+            </div>
             <div className="grid grid-cols-4 gap-3">
               {SEMAFORO_CARDS.map(([k,bg,tc,lc])=>(
                 <SemaforoCard key={k} label={k} valor={dados.totais_geral?.[k]||0} bg={bg} textCor={tc} labelCor={lc}/>
               ))}
             </div>
+            <p className="text-xs text-gray-400 mt-3 text-center">
+              💡 O laudo consolidado mostra a média de cada fator de risco entre todas as filiais (13 fatores no total)
+            </p>
           </Card>
 
           {/* RANKING FILIAIS */}

@@ -694,8 +694,13 @@ export default function PainelPrincipal() {
                         )}
                       </p>
                       <p className="text-xs text-gray-400 mt-0.5"><BadgeRisco valor={a.status}/></p>
+                      {a.status==='coletada' && (
+                        <p className="text-xs text-purple-600 font-medium mt-0.5">⚡ Coleta completa — pronta para processar!</p>
+                      )}
                     </div>
-                    <Btn variant="ghost" onClick={()=>verResultados(a)} className="text-xs">Ver resultados</Btn>
+                    <Btn variant={a.status==='coletada'?'primary':'ghost'} onClick={()=>verResultados(a)} className="text-xs">
+                      {a.status==='coletada'?'Processar agora →':'Ver resultados'}
+                    </Btn>
                   </div>
                   <BarraProgresso coletadas={parseInt(a.respostas_coletadas)||0} total={parseInt(a.setor_total_funcionarios)||0}/>
                 </Card>

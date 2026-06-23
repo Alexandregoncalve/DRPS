@@ -10,6 +10,7 @@ export function BadgeRisco({ valor }) {
     Crítico: "bg-red-100 text-red-800",
     Pendente: "bg-gray-100 text-gray-500",
     processada: "bg-green-100 text-green-800",
+    coletada: "bg-purple-100 text-purple-800",
     aberta: "bg-blue-100 text-blue-800",
     "Não avaliado": "bg-gray-100 text-gray-400",
     psicologo: "bg-purple-100 text-purple-800",
@@ -17,7 +18,7 @@ export function BadgeRisco({ valor }) {
     gestor_matriz: "bg-blue-100 text-blue-800",
     gestor_filial: "bg-amber-100 text-amber-800",
   };
-  const labels = { processada: "Processada", aberta: "Aberta", psicologo: "Psicólogo", admin: "Admin", gestor_matriz: "Gestor Matriz", gestor_filial: "Gestor Filial" };
+  const labels = { processada: "✅ Processada", coletada: "✔ Coleta concluída", aberta: "Aberta", psicologo: "Psicólogo", admin: "Admin", gestor_matriz: "Gestor Matriz", gestor_filial: "Gestor Filial" };
   return (
     <span className={`px-2 py-0.5 rounded text-xs font-medium ${cores[valor] || "bg-gray-100 text-gray-500"}`}>
       {labels[valor] || valor}
@@ -81,6 +82,6 @@ export function Select({ label, children, ...props }) {
 }
 
 export function Alert({ children, type = "info" }) {
-  const s = { info: "bg-blue-50 text-blue-800", error: "bg-red-50 text-red-700", success: "bg-green-50 text-green-800" };
+  const s = { info: "bg-blue-50 text-blue-800", error: "bg-red-50 text-red-700", success: "bg-green-50 text-green-800", warning: "bg-amber-50 text-amber-800" };
   return <div className={`rounded-lg p-3 text-sm mb-4 ${s[type]}`}>{children}</div>;
 }
