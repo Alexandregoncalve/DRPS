@@ -100,6 +100,109 @@ module.exports = (pool) => {
   });
 
 
+  // GET /api/avaliacoes/consolidado/matriz — dashboard consolidado por filial (gestor_matriz e admin)
+  router.get('/consolidado/matriz', autenticar, exigirPapel('admin','psicologo','gestor_matriz'), async (req, res) => {
+    const { papel, empresa_vinculada_id } = req.usuario;
+    try {
+      // Busca todas as avaliações processadas das filiais da matriz
+      let empresaFiltro = '';
+      let params = [];
+      if (papel === 'gestor_matriz') {
+        empresaFiltro = 'WHERE (e.id = $1 OR e.matriz_id = $1) AND a.status = \'processada\'';
+        params = [empresa_vinculada_id];
+      } else {
+        empresaFiltro = 'WHERE a.status = \'processada\'';
+      }
+
+      const { rows: avaliacoes } = await pool.query(`
+        SELECT a.id, a.criado_em, a.total_respostas,
+          s.nome as setor_nome, s.total_funcionarios,
+          e.id as empresa_id, e.nome as empresa_nome, e.tipo as empresa_tipo,
+          em.nome as matriz_nome
+        FROM avaliacoes a
+        JOIN setores s ON a.setor_id = s.id
+        JOIN empresas e ON s.empresa_id = e.id
+        LEFT JOIN empresas em ON e.matriz_id = em.id
+        ${empresaFiltro}
+        ORDER BY e.nome, a.criado_em DESC
+      `, params);
+
+      // Para cada avaliação, busca contagem de riscos
+      const resultado = [];
+      for (const aval of avaliacoes) {
+        const { rows: conts } = await pool.query(`
+          SELECT matriz_risco, COUNT(*) as total
+          FROM resultados WHERE avaliacao_id = $1
+          GROUP BY matriz_risco
+        `, [aval.id]);
+        const contagem = { Baixo: 0, Médio: 0, Alto: 0, Crítico: 0 };
+        conts.forEach(c => { if (contagem[c.matriz_risco] !== undefined) contagem[c.matriz_risco] = parseInt(c.total); });
+        resultado.push({ ...aval, contagem });
+      }
+
+      // Agrupa por empresa
+      const porEmpresa = {};
+      resultado.forEach(a => {
+        if (!porEmpresa[a.empresa_id]) {
+          porEmpresa[a.empresa_id] = {
+            empresa_id: a.empresa_id, empresa_nome: a.empresa_nome,
+            empresa_tipo: a.empresa_tipo, matriz_nome: a.matriz_nome,
+            avaliacoes: [], totais: { Baixo:0, Médio:0, Alto:0, Crítico:0 }
+          };
+        }
+        porEmpresa[a.empresa_id].avaliacoes.push(a);
+        ['Baixo','Médio','Alto','Crítico'].forEach(k => {
+          porEmpresa[a.empresa_id].totais[k] += a.contagem[k]||0;
+        });
+      });
+
+      res.json({
+        empresas: Object.values(porEmpresa),
+        totais_geral: resultado.reduce((acc, a) => {
+          ['Baixo','Médio','Alto','Crítico'].forEach(k => acc[k] = (acc[k]||0) + (a.contagem[k]||0));
+          return acc;
+        }, { Baixo:0, Médio:0, Alto:0, Crítico:0 })
+      });
+    } catch (e) { console.error(e); res.status(500).json({ erro: e.message }); }
+  });
+
+  // GET /api/avaliacoes/consolidado/filial — dashboard da filial (gestor_filial)
+  router.get('/consolidado/filial', autenticar, exigirPapel('gestor_filial','admin'), async (req, res) => {
+    const { empresa_vinculada_id } = req.usuario;
+    try {
+      const { rows: avaliacoes } = await pool.query(`
+        SELECT a.id, a.criado_em, a.total_respostas, a.data_fim, a.status,
+          s.nome as setor_nome, s.total_funcionarios,
+          e.nome as empresa_nome
+        FROM avaliacoes a
+        JOIN setores s ON a.setor_id = s.id
+        JOIN empresas e ON s.empresa_id = e.id
+        WHERE e.id = $1
+        ORDER BY a.criado_em DESC
+      `, [empresa_vinculada_id]);
+
+      const resultado = [];
+      for (const aval of avaliacoes) {
+        const { rows: riscos } = await pool.query(`
+          SELECT topico_nome, classif_gravidade, classif_probabilidade, matriz_risco
+          FROM resultados WHERE avaliacao_id = $1 AND matriz_risco IN ('Alto','Crítico')
+          ORDER BY CASE matriz_risco WHEN 'Crítico' THEN 1 WHEN 'Alto' THEN 2 END
+          LIMIT 5
+        `, [aval.id]);
+        const { rows: conts } = await pool.query(`
+          SELECT matriz_risco, COUNT(*) as total
+          FROM resultados WHERE avaliacao_id = $1
+          GROUP BY matriz_risco
+        `, [aval.id]);
+        const contagem = { Baixo:0, Médio:0, Alto:0, Crítico:0 };
+        conts.forEach(c => { if (contagem[c.matriz_risco] !== undefined) contagem[c.matriz_risco] = parseInt(c.total); });
+        resultado.push({ ...aval, contagem, top_riscos: riscos });
+      }
+
+      res.json(resultado);
+    } catch (e) { console.error(e); res.status(500).json({ erro: e.message }); }
+  });
+
   // GET /api/avaliacoes/criterios-probabilidade — lista as perguntas guiadas
   router.get('/criterios-probabilidade', autenticar, (req, res) => {
     res.json(CRITERIOS_PROBABILIDADE);

@@ -124,13 +124,12 @@ export default function Formulario({ token }) {
       <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
         <div className="text-6xl mb-4">✅</div>
         <h2 className="text-xl font-bold text-gray-900 mb-3">Você já participou!</h2>
-        <p className="text-base text-gray-600 mb-6 leading-relaxed">
+        <p className="text-base text-gray-600 mb-4 leading-relaxed">
           Suas respostas já foram registradas com sucesso. Obrigado pela sua participação!
         </p>
-        <button onClick={()=>window.close()}
-          className="w-full bg-gray-800 text-white rounded-xl py-4 text-base font-semibold">
-          Fechar
-        </button>
+        <p className="text-sm text-gray-400 bg-gray-50 rounded-xl py-3 px-4">
+          Você pode fechar esta aba agora.
+        </p>
       </div>
     </div>
   );
@@ -162,13 +161,13 @@ export default function Formulario({ token }) {
         <p className="text-base text-gray-600 mb-2 leading-relaxed">
           Obrigado pela sua participação. Suas respostas são completamente anônimas e serão analisadas de forma agregada.
         </p>
-        <p className="text-sm text-gray-400 mb-8">
+        <p className="text-sm text-gray-400 mb-6">
           Sua contribuição é muito importante para melhorar o ambiente de trabalho.
         </p>
-        <button onClick={()=>window.close()}
-          className="w-full bg-green-600 text-white rounded-xl py-4 text-base font-semibold hover:bg-green-700">
-          ✓ Fechar esta página
-        </button>
+        <div className="bg-green-50 border border-green-200 rounded-xl py-4 px-4">
+          <p className="text-sm font-semibold text-green-700">✓ Participação concluída!</p>
+          <p className="text-xs text-green-600 mt-1">Você já pode fechar esta aba.</p>
+        </div>
       </div>
     </div>
   );

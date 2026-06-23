@@ -27,6 +27,10 @@ export default function PainelPrincipal() {
   const [msg, setMsg] = useState(""); const [erro, setErro] = useState("");
   const [processando, setProcessando] = useState(false);
   const [topicoModalAberto, setTopicoModalAberto] = useState(null);
+  const [modalIdentificacao, setModalIdentificacao] = useState(false);
+  const [dadosIdentificacao, setDadosIdentificacao] = useState({
+    funcoes: '', homens: '', mulheres: '', agravos: '', medidas_controle: ''
+  });
   const [novaEmp, setNovaEmp] = useState({ nome:"", cnpj:"", total_funcionarios:"", tipo:"matriz", matriz_id:"" });
   const [novoSetor, setNovoSetor] = useState({ nome:"", total_funcionarios:"" });
   const [adicionandoSetor, setAdicionandoSetor] = useState(false);
@@ -200,43 +204,184 @@ export default function PainelPrincipal() {
     a.click(); URL.revokeObjectURL(url);
   }
 
-  function exportarPDF() {
+  async function exportarPDF(ident = {}) {
     if (!resultados?.resultados) return;
-    const linhas = [];
-    const data = new Date().toLocaleDateString('pt-BR');
-    linhas.push('DIAGNÓSTICO DE RISCOS PSICOSSOCIAIS — NR-01');
-    linhas.push('');
-    linhas.push(`Empresa: ${avalSelecionada.empresa_nome}`);
-    linhas.push(`Setor: ${avalSelecionada.setor_nome}`);
-    linhas.push(`Data: ${data}`);
-    linhas.push(`Respostas coletadas: ${avalSelecionada.total_respostas || '—'}`);
-    linhas.push('');
-    linhas.push('RESUMO DA MATRIZ DE RISCO');
-    linhas.push(`Crítico: ${resultados.contagem?.Crítico||0}  |  Alto: ${resultados.contagem?.Alto||0}  |  Médio: ${resultados.contagem?.Médio||0}  |  Baixo: ${resultados.contagem?.Baixo||0}`);
-    linhas.push('');
-    linhas.push('CLASSIFICAÇÃO POR TÓPICO');
-    linhas.push('─'.repeat(80));
-    resultados.resultados.forEach(r => {
-      linhas.push(`${r.topico_nome}`);
-      linhas.push(`  Gravidade: ${r.classif_gravidade}  |  Probabilidade: ${r.classif_probabilidade}  |  Matriz: ${r.matriz_risco}`);
-      linhas.push(`  Fonte: ${r.fonte_geradora}`);
-      if (r.acoes_sugeridas?.length > 0 && (r.matriz_risco==='Alto'||r.matriz_risco==='Crítico')) {
-        linhas.push('  Ações sugeridas:');
-        r.acoes_sugeridas.forEach(a => linhas.push(`    • ${a}`));
-      }
-      linhas.push('');
-    });
-    linhas.push('─'.repeat(80));
-    linhas.push('Documento gerado pelo Sistema DRPS — NeXa Psicossocial');
-    linhas.push(`Gerado em: ${data}`);
+    setMsg('⏳ Gerando PDF...');
 
-    const texto = linhas.join('\n');
-    const blob = new Blob([texto], {type:'text/plain;charset=utf-8'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href=url;
-    a.download = `DRPS_${avalSelecionada.empresa_nome}_${avalSelecionada.setor_nome}_${new Date().toISOString().slice(0,10)}.txt`;
-    a.click(); URL.revokeObjectURL(url);
-    setMsg('📄 Relatório exportado! Abra o .txt e use Ctrl+P para imprimir/salvar como PDF.');
+    // Captura radar da tela
+    let radarImgData = null;
+    try {
+      const { default: html2canvas } = await import('html2canvas');
+      const radarEl = document.getElementById('radar-chart-container');
+      if (radarEl) {
+        const canvas = await html2canvas(radarEl, { scale: 2, backgroundColor: '#ffffff' });
+        radarImgData = canvas.toDataURL('image/png');
+      }
+    } catch(e) { console.warn('html2canvas:', e); }
+
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const data = new Date().toLocaleDateString('pt-BR');
+    const margem = 15;
+    const largura = 180;
+    let y = 15;
+
+    function linha(texto, tamanho=10, negrito=false, cor=[30,30,30]) {
+      doc.setFontSize(tamanho);
+      doc.setFont('helvetica', negrito ? 'bold' : 'normal');
+      doc.setTextColor(...cor);
+      const linhas = doc.splitTextToSize(String(texto), largura);
+      linhas.forEach(l => {
+        if (y > 275) { doc.addPage(); y = 15; }
+        doc.text(l, margem, y);
+        y += tamanho * 0.45;
+      });
+      y += 1;
+    }
+    function separador(cor=[200,200,200]) {
+      if (y > 275) { doc.addPage(); y = 15; }
+      doc.setDrawColor(...cor);
+      doc.line(margem, y, margem + largura, y);
+      y += 4;
+    }
+    function retanguloColorido(texto, bgR, bgG, bgB, x, yPos, w, h=7) {
+      doc.setFillColor(bgR, bgG, bgB);
+      doc.roundedRect(x, yPos, w, h, 2, 2, 'F');
+      doc.setTextColor(255,255,255);
+      doc.setFontSize(9); doc.setFont('helvetica','bold');
+      doc.text(texto, x + w/2, yPos + 4.8, {align:'center'});
+      doc.setTextColor(30,30,30);
+    }
+
+    // CABEÇALHO
+    doc.setFillColor(10, 38, 71);
+    doc.rect(0, 0, 210, 28, 'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(16); doc.setFont('helvetica','bold');
+    doc.text('DIAGNÓSTICO DE RISCOS PSICOSSOCIAIS', margem, 12);
+    doc.setFontSize(10); doc.setFont('helvetica','normal');
+    doc.text('Conforme NR-01 — NeXa Psicossocial', margem, 19);
+    doc.text(`Gerado em: ${data}`, 195, 19, {align:'right'});
+    y = 36;
+
+    // IDENTIFICAÇÃO COMPLETA NR-01
+    linha('IDENTIFICAÇÃO', 11, true, [10,38,71]);
+    separador([10,38,71]);
+    linha(`Empresa: ${avalSelecionada.empresa_nome}`, 10);
+    linha(`Setor: ${avalSelecionada.setor_nome}`, 10);
+    linha(`Responsável Técnico: ${usuario.nome}${usuario.crp ? ` — CRP: ${usuario.crp}` : ''}`, 10);
+    linha(`Data de Elaboração: ${data}`, 10);
+    if (ident.funcoes) linha(`Funções/Cargos Avaliados: ${ident.funcoes}`, 10);
+    if (ident.homens || ident.mulheres) {
+      const total = (parseInt(ident.homens)||0) + (parseInt(ident.mulheres)||0);
+      linha(`Trabalhadores: ${total} total (${ident.homens||0} homens / ${ident.mulheres||0} mulheres)`, 10);
+    }
+    linha(`Respostas coletadas: ${avalSelecionada.total_respostas || '—'}`, 10);
+    if (ident.agravos) linha(`Possíveis Agravos à Saúde Mental: ${ident.agravos}`, 10);
+    if (ident.medidas_controle) linha(`Medidas de Controle Existentes: ${ident.medidas_controle}`, 10);
+    y += 4;
+
+    // SEMÁFORO
+    linha('MATRIZ DE RISCO — RESUMO', 11, true, [10,38,71]);
+    separador([10,38,71]);
+    const conts = [
+      ['Crítico', resultados.contagem?.Crítico||0, 153,0,0],
+      ['Alto',    resultados.contagem?.Alto||0,    220,80,80],
+      ['Médio',   resultados.contagem?.Médio||0,   202,178,0],
+      ['Baixo',   resultados.contagem?.Baixo||0,   34,139,34],
+    ];
+    const colW = 42;
+    conts.forEach(([label, val, r, g, b], i) => {
+      const cx = margem + i * (colW + 3);
+      doc.setFillColor(r, g, b);
+      doc.roundedRect(cx, y, colW, 16, 3, 3, 'F');
+      doc.setTextColor(255,255,255);
+      doc.setFontSize(18); doc.setFont('helvetica','bold');
+      doc.text(String(val), cx + colW/2, y + 9, {align:'center'});
+      doc.setFontSize(8); doc.setFont('helvetica','normal');
+      doc.text(label, cx + colW/2, y + 14, {align:'center'});
+    });
+    doc.setTextColor(30,30,30);
+    y += 22;
+
+    // RADAR
+    if (radarImgData) {
+      if (y > 200) { doc.addPage(); y = 15; }
+      linha('PANORAMA GERAL — RADAR', 11, true, [10,38,71]);
+      separador([10,38,71]);
+      doc.addImage(radarImgData, 'PNG', margem, y, largura, 80);
+      y += 86;
+    }
+
+    // TABELA
+    linha('CLASSIFICAÇÃO POR TÓPICO', 11, true, [10,38,71]);
+    separador([10,38,71]);
+    doc.setFillColor(240,242,245);
+    doc.rect(margem, y, largura, 7, 'F');
+    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
+    doc.text('Fator de Risco', margem+2, y+5);
+    doc.text('Gravidade', margem+100, y+5);
+    doc.text('Prob.', margem+125, y+5);
+    doc.text('Matriz', margem+145, y+5);
+    y += 9;
+
+    const corMatriz = {'Crítico':[153,0,0],'Alto':[220,80,80],'Médio':[202,178,0],'Baixo':[34,139,34]};
+    const corGrav = {'Alta':[180,0,0],'Média':[160,130,0],'Baixa':[34,139,34]};
+
+    resultados.resultados.forEach((r, idx) => {
+      if (y > 270) { doc.addPage(); y = 15; }
+      if (idx % 2 === 0) { doc.setFillColor(250,251,252); doc.rect(margem, y-1, largura, 8, 'F'); }
+      doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(30,30,30);
+      doc.text(doc.splitTextToSize(r.topico_nome, 95)[0], margem+2, y+4);
+      const cg = corGrav[r.classif_gravidade]||[100,100,100];
+      doc.setTextColor(...cg); doc.setFont('helvetica','bold');
+      doc.text(r.classif_gravidade||'—', margem+100, y+4);
+      doc.setTextColor(30,30,30); doc.setFont('helvetica','normal');
+      doc.text(r.classif_probabilidade||'—', margem+125, y+4);
+      const cm = corMatriz[r.matriz_risco]||[150,150,150];
+      retanguloColorido(r.matriz_risco||'—', ...cm, margem+140, y, 30, 6);
+      y += 9;
+    });
+    y += 4;
+
+    // PLANO DE AÇÃO
+    const riscos = resultados.resultados.filter(r=>r.matriz_risco==='Alto'||r.matriz_risco==='Crítico');
+    if (riscos.length > 0) {
+      if (y > 240) { doc.addPage(); y = 15; }
+      linha('PLANO DE AÇÃO — RISCOS PRIORITÁRIOS', 11, true, [10,38,71]);
+      separador([10,38,71]);
+      riscos.forEach(r => {
+        if (y > 260) { doc.addPage(); y = 15; }
+        const cm = corMatriz[r.matriz_risco]||[150,150,150];
+        doc.setFillColor(...cm);
+        doc.roundedRect(margem, y, 20, 6, 2, 2, 'F');
+        doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont('helvetica','bold');
+        doc.text(r.matriz_risco, margem+10, y+4, {align:'center'});
+        doc.setTextColor(30,30,30); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+        doc.text(r.topico_nome, margem+23, y+4);
+        y += 8;
+        linha(`Fonte: ${r.fonte_geradora}`, 8, false, [80,80,80]);
+        r.acoes_sugeridas?.forEach(a => {
+          if (y > 270) { doc.addPage(); y = 15; }
+          linha(`• ${a}`, 8);
+        });
+        y += 3;
+      });
+    }
+
+    // RODAPÉ
+    const totalPags = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPags; i++) {
+      doc.setPage(i);
+      doc.setFillColor(240,242,245);
+      doc.rect(0, 287, 210, 10, 'F');
+      doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(120,120,120);
+      doc.text('NeXa Psicossocial — Sistema DRPS — Diagnóstico de Riscos Psicossociais (NR-01)', margem, 293);
+      doc.text(`Pág. ${i}/${totalPags}`, 195, 293, {align:'right'});
+    }
+
+    doc.save(`DRPS_${avalSelecionada.empresa_nome}_${avalSelecionada.setor_nome}_${data.replace(/\//g,'-')}.pdf`);
+    setMsg('✅ PDF gerado com sucesso!');
   }
 
   // ---- VIEW: RESULTADOS ----
@@ -257,7 +402,7 @@ export default function PainelPrincipal() {
       acoes={
         <div className="flex gap-2">
           <Btn variant="secondary" onClick={exportarCSV}>⬇ CSV</Btn>
-          <Btn variant="secondary" onClick={exportarPDF}>📄 PDF</Btn>
+          <Btn variant="secondary" onClick={()=>setModalIdentificacao(true)}>📄 PDF</Btn>
           <Btn variant="secondary" onClick={()=>setView("avaliacoes")}>← Voltar</Btn>
         </div>
       }>
@@ -310,7 +455,8 @@ export default function PainelPrincipal() {
       {/* GRÁFICO RADAR */}
       <Card className="p-4 mb-6">
         <h3 className="text-sm font-semibold text-gray-800 mb-3">📡 Panorama Geral (Radar)</h3>
-        <ResponsiveContainer width="100%" height={320}>
+        <div id="radar-chart-container">
+          <ResponsiveContainer width="100%" height={320}>
           <RadarChart data={radarData}>
             <PolarGrid />
             <PolarAngleAxis dataKey="topico" tick={{fontSize:10}}/>
@@ -318,36 +464,37 @@ export default function PainelPrincipal() {
             <Radar name="Gravidade" dataKey="valor" stroke="#0A2647" fill="#0A2647" fillOpacity={0.25}/>
           </RadarChart>
         </ResponsiveContainer>
+        </div>
       </Card>
 
       {/* TABELA DETALHADA */}
       <Card className="overflow-hidden mb-4">
         <table className="w-full text-sm">
-          <thead><tr className="border-b border-gray-100">
-            <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium">Tópico</th>
-            <th className="px-4 py-3 text-xs text-gray-400 font-medium">Gravidade</th>
-            <th className="px-4 py-3 text-xs text-gray-400 font-medium">Prob.</th>
-            <th className="px-4 py-3 text-xs text-gray-400 font-medium">Matriz</th>
-            <th className="px-4 py-3 text-xs text-gray-400 font-medium w-28">Definir prob.</th>
+          <thead><tr className="border-b border-gray-100 bg-gray-50">
+            <th className="text-left px-3 py-2 text-xs text-gray-400 font-medium">Tópico</th>
+            <th className="px-2 py-2 text-xs text-gray-400 font-medium w-16">Grav.</th>
+            <th className="px-2 py-2 text-xs text-gray-400 font-medium w-14">Prob.</th>
+            <th className="px-2 py-2 text-xs text-gray-400 font-medium w-20">Matriz</th>
+            <th className="px-2 py-2 text-xs text-gray-400 font-medium w-48">Definir probabilidade</th>
           </tr></thead>
           <tbody>
             {resultados.resultados.map(r=>{
               const s = semaforoMatriz(r.matriz_risco);
               return (
               <tr key={r.topico_num} className="border-b border-gray-50 hover:bg-gray-50">
-                <td className="px-4 py-3 text-xs text-gray-700">{r.topico_nome}</td>
-                <td className="px-4 py-3 text-center"><span className={`text-xs font-medium ${semaforoGrav(r.classif_gravidade)}`}>{r.classif_gravidade}</span></td>
-                <td className="px-4 py-3 text-center"><span className="text-xs text-gray-600">{r.classif_probabilidade}</span></td>
-                <td className="px-4 py-3 text-center"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cor}`}>{s.icone} {s.label}</span></td>
-                <td className="px-4 py-3 text-center">
-                  <div className="flex flex-col items-center gap-1.5">
+                <td className="px-3 py-2 text-xs text-gray-700">{r.topico_nome}</td>
+                <td className="px-2 py-2 text-center"><span className={`text-xs font-medium ${semaforoGrav(r.classif_gravidade)}`}>{r.classif_gravidade}</span></td>
+                <td className="px-2 py-2 text-center"><span className="text-xs text-gray-600">{r.classif_probabilidade}</span></td>
+                <td className="px-2 py-2 text-center"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cor}`}>{s.label}</span></td>
+                <td className="px-2 py-2">
+                  <div className="flex items-center gap-1.5">
                     <select value={probabilidades[r.topico_num]||2}
                       onChange={ev=>setProbabilidades({...probabilidades,[r.topico_num]:ev.target.value})}
-                      className="border border-gray-200 rounded px-2 py-1 text-xs bg-white text-gray-900 w-full">
+                      className="border border-gray-200 rounded px-1.5 py-1 text-xs bg-white text-gray-900 flex-1">
                       <option value={1}>1 - Baixa</option><option value={2}>2 - Média</option><option value={3}>3 - Alta</option>
                     </select>
                     <button type="button" onClick={()=>setTopicoModalAberto(r)}
-                      className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1 hover:bg-blue-100 w-full whitespace-nowrap">
+                      className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1 hover:bg-blue-100 whitespace-nowrap flex-shrink-0">
                       📋 Critérios
                     </button>
                   </div>
@@ -403,6 +550,88 @@ export default function PainelPrincipal() {
           </div>
         </div>
       </Card>
+
+      {/* MODAL IDENTIFICAÇÃO DO LAUDO */}
+      {modalIdentificacao && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            <div className="bg-navy p-5 rounded-t-2xl" style={{background:'#0A2647'}}>
+              <h2 className="text-white font-bold text-lg">📋 Identificação do Laudo — NR-01</h2>
+              <p className="text-blue-200 text-sm mt-1">Preencha os dados complementares para o laudo oficial</p>
+            </div>
+            <div className="p-5 space-y-4">
+              {/* Dados automáticos */}
+              <div className="bg-gray-50 rounded-xl p-3 space-y-1">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Preenchido automaticamente</p>
+                <p className="text-sm text-gray-700"><span className="font-medium">Empresa:</span> {avalSelecionada?.empresa_nome}</p>
+                <p className="text-sm text-gray-700"><span className="font-medium">Setor:</span> {avalSelecionada?.setor_nome}</p>
+                <p className="text-sm text-gray-700"><span className="font-medium">Responsável técnico:</span> {usuario.nome} {usuario.crp ? `— CRP: ${usuario.crp}` : ''}</p>
+                <p className="text-sm text-gray-700"><span className="font-medium">Data:</span> {new Date().toLocaleDateString('pt-BR')}</p>
+              </div>
+
+              {/* Dados a preencher */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Funções/cargos avaliados neste setor *</label>
+                <input type="text"
+                  placeholder="Ex: Analista, Assistente Administrativo, Coordenador"
+                  value={dadosIdentificacao.funcoes}
+                  onChange={e=>setDadosIdentificacao({...dadosIdentificacao, funcoes:e.target.value})}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"/>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Quantidade — Homens</label>
+                  <input type="number" min="0"
+                    placeholder="0"
+                    value={dadosIdentificacao.homens}
+                    onChange={e=>setDadosIdentificacao({...dadosIdentificacao, homens:e.target.value})}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"/>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Quantidade — Mulheres</label>
+                  <input type="number" min="0"
+                    placeholder="0"
+                    value={dadosIdentificacao.mulheres}
+                    onChange={e=>setDadosIdentificacao({...dadosIdentificacao, mulheres:e.target.value})}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"/>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Possíveis agravos à saúde mental</label>
+                <textarea
+                  placeholder="Ex: Burnout, transtornos de ansiedade, quadros depressivos relacionados ao trabalho..."
+                  value={dadosIdentificacao.agravos}
+                  onChange={e=>setDadosIdentificacao({...dadosIdentificacao, agravos:e.target.value})}
+                  rows={2}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 resize-none"/>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Medidas de controle existentes</label>
+                <textarea
+                  placeholder="Ex: Programa de apoio psicológico, canal de denúncias, treinamentos de liderança..."
+                  value={dadosIdentificacao.medidas_controle}
+                  onChange={e=>setDadosIdentificacao({...dadosIdentificacao, medidas_controle:e.target.value})}
+                  rows={2}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 resize-none"/>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button onClick={()=>setModalIdentificacao(false)}
+                  className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-3 text-sm font-medium hover:bg-gray-50">
+                  Cancelar
+                </button>
+                <button onClick={()=>{ setModalIdentificacao(false); exportarPDF(dadosIdentificacao); }}
+                  className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-sm font-bold hover:bg-blue-700">
+                  Gerar PDF completo →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {topicoModalAberto && (
         <CriteriosProbabilidadeModal
