@@ -89,17 +89,6 @@ module.exports = (pool) => {
     } catch (e) { console.error('ERRO:', e); res.status(500).json({ erro: e.message }); }
   });
 
-  // GET /api/avaliacoes/:id/resultados
-  router.get('/:id/resultados', autenticar, async (req, res) => {
-    try {
-      const { rows } = await pool.query('SELECT * FROM resultados WHERE avaliacao_id=$1 ORDER BY topico_num', [req.params.id]);
-      const contagem = { Baixo: 0, Médio: 0, Alto: 0, Crítico: 0 };
-      rows.forEach(r => { if (contagem[r.matriz_risco] !== undefined) contagem[r.matriz_risco]++; });
-      res.json({ resultados: rows, contagem });
-    } catch (e) { console.error('ERRO:', e); res.status(500).json({ erro: e.message }); }
-  });
-
-
   // GET /api/avaliacoes/consolidado/matriz — dashboard consolidado por filial (gestor_matriz e admin)
   router.get('/consolidado/matriz', autenticar, exigirPapel('admin','psicologo','gestor_matriz'), async (req, res) => {
     const { papel, empresa_vinculada_id } = req.usuario;
@@ -156,9 +145,58 @@ module.exports = (pool) => {
         });
       });
 
+      // Calcula totais_geral usando PIOR resultado por tópico (não soma)
+      const ordemRisco = { 'Crítico':4, 'Alto':3, 'Médio':2, 'Baixo':1 };
+
+      // Busca todos os resultados de todas as avaliações filtradas
+      const todasAvalIds = resultado.map(a => a.id);
+      let piorPorTopico = {};
+      if (todasAvalIds.length > 0) {
+        const placeholders = todasAvalIds.map((_,i)=>`$${i+1}`).join(',');
+        const { rows: todosResultados } = await pool.query(
+          `SELECT topico_num, matriz_risco FROM resultados WHERE avaliacao_id IN (${placeholders})`,
+          todasAvalIds
+        );
+        todosResultados.forEach(r => {
+          const atual = piorPorTopico[r.topico_num];
+          if (!atual || (ordemRisco[r.matriz_risco]||0) > (ordemRisco[atual]||0)) {
+            piorPorTopico[r.topico_num] = r.matriz_risco;
+          }
+        });
+      }
+
+      const totais_geral = { Baixo:0, Médio:0, Alto:0, Crítico:0 };
+      Object.values(piorPorTopico).forEach(risco => {
+        if (totais_geral[risco] !== undefined) totais_geral[risco]++;
+      });
+
+      // Também corrigir totais por empresa usando pior resultado por tópico
+      for (const emp of Object.values(porEmpresa)) {
+        const empAvalIds = emp.avaliacoes.map(a => a.id);
+        let piorEmp = {};
+        if (empAvalIds.length > 0) {
+          const ph = empAvalIds.map((_,i)=>`$${i+1}`).join(',');
+          const { rows: rEmp } = await pool.query(
+            `SELECT topico_num, matriz_risco FROM resultados WHERE avaliacao_id IN (${ph})`,
+            empAvalIds
+          );
+          rEmp.forEach(r => {
+            const atual = piorEmp[r.topico_num];
+            if (!atual || (ordemRisco[r.matriz_risco]||0) > (ordemRisco[atual]||0)) {
+              piorEmp[r.topico_num] = r.matriz_risco;
+            }
+          });
+        }
+        emp.totais = { Baixo:0, Médio:0, Alto:0, Crítico:0 };
+        Object.values(piorEmp).forEach(risco => {
+          if (emp.totais[risco] !== undefined) emp.totais[risco]++;
+        });
+      }
+
       res.json({
         empresas: Object.values(porEmpresa),
-        totais_geral: resultado.reduce((acc, a) => {
+        totais_geral,
+        totais_ocorrencias: resultado.reduce((acc, a) => {
           ['Baixo','Médio','Alto','Crítico'].forEach(k => acc[k] = (acc[k]||0) + (a.contagem[k]||0));
           return acc;
         }, { Baixo:0, Médio:0, Alto:0, Crítico:0 })
@@ -333,6 +371,16 @@ module.exports = (pool) => {
       const empresas = [...new Set(rows.map(r=>r.empresa_nome))];
       res.json({ empresas, total_empresas: empresas.length, resultados, contagem });
     } catch(e) { console.error(e); res.status(500).json({ erro: e.message }); }
+  });
+
+  // GET /api/avaliacoes/:id/resultados
+  router.get('/:id/resultados', autenticar, async (req, res) => {
+    try {
+      const { rows } = await pool.query('SELECT * FROM resultados WHERE avaliacao_id=$1 ORDER BY topico_num', [req.params.id]);
+      const contagem = { Baixo: 0, Médio: 0, Alto: 0, Crítico: 0 };
+      rows.forEach(r => { if (contagem[r.matriz_risco] !== undefined) contagem[r.matriz_risco]++; });
+      res.json({ resultados: rows, contagem });
+    } catch (e) { console.error('ERRO:', e); res.status(500).json({ erro: e.message }); }
   });
 
   // GET /api/avaliacoes/criterios-probabilidade — lista as perguntas guiadas
