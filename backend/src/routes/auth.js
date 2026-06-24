@@ -25,12 +25,12 @@ module.exports = (pool) => {
         return res.status(401).json({ erro: 'Credenciais inválidas' });
       }
       const token = jwt.sign(
-        { id: usuario.id, papel: usuario.papel, nome: usuario.nome, empresa_vinculada_id: usuario.empresa_vinculada_id },
+        { id: usuario.id, papel: usuario.papel, nome: usuario.nome, empresa_vinculada_id: usuario.empresa_vinculada_id, organizacao_id: usuario.organizacao_id },
         process.env.JWT_SECRET || 'drps_secret_2025',
         { expiresIn: '8h' }
       );
       await audit(pool, 'LOGIN_OK', usuario.id, { email }, req);
-      res.json({ token, usuario: { nome: usuario.nome, papel: usuario.papel, crp: usuario.crp, empresa_vinculada_id: usuario.empresa_vinculada_id, precisa_trocar_senha: usuario.precisa_trocar_senha } });
+      res.json({ token, usuario: { nome: usuario.nome, papel: usuario.papel, crp: usuario.crp, empresa_vinculada_id: usuario.empresa_vinculada_id, organizacao_id: usuario.organizacao_id, precisa_trocar_senha: usuario.precisa_trocar_senha } });
     } catch (e) {
       console.error(e);
       res.status(500).json({ erro: 'Erro interno' });
