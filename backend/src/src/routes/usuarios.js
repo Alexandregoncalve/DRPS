@@ -45,16 +45,22 @@ module.exports = (pool) => {
       ? ['admin', 'psicologo', 'gestor_matriz', 'gestor_filial']
       : ['gestor_matriz', 'gestor_filial'];
     if (!papeisPermitidos.includes(papel)) return res.status(403).json({ erro: 'Sem permissão para este perfil' });
+
+    // Herda a organização do usuário que está criando
+    const organizacao_id = req.usuario.organizacao_id;
+    if (!organizacao_id) return res.status(400).json({ erro: 'Usuário sem organização vinculada. Faça logout e login novamente.' });
+
     try {
       const hash = await bcrypt.hash(senha, 10);
       const { rows } = await pool.query(
-       INSERT INTO usuarios (nome, email, senha_hash, papel, crp, empresa_vinculada_id, organizacao_id, precisa_trocar_senha) VALUES ($1,$2,$3,$4,$5,$6,true) RETURNING id,nome,email,papel,crp',
-       [sanitize(nome), sanitize(email), hash, papel, sanitize(crp) || null, empresa_vinculada_id || null, req.usuario.organizacao_id]
+        'INSERT INTO usuarios (nome, email, senha_hash, papel, crp, empresa_vinculada_id, organizacao_id, precisa_trocar_senha) VALUES ($1,$2,$3,$4,$5,$6,$7,true) RETURNING id,nome,email,papel,crp',
+        [sanitize(nome), sanitize(email), hash, papel, sanitize(crp) || null, empresa_vinculada_id || null, organizacao_id]
       );
       await audit(pool, 'USUARIO_CRIADO', req.usuario.id, { email, papel }, req);
       res.json(rows[0]);
     } catch (e) {
       if (e.code === '23505') return res.status(400).json({ erro: 'E-mail já cadastrado' });
+      console.error(e);
       res.status(500).json({ erro: 'Erro interno' });
     }
   });
