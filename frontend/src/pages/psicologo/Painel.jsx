@@ -35,7 +35,7 @@ export default function PainelPrincipal() {
   const [novoSetor, setNovoSetor] = useState({ nome:"", total_funcionarios:"" });
   const [adicionandoSetor, setAdicionandoSetor] = useState(false);
   const [novaAval, setNovaAval] = useState({ empresa_id:"", setor_id:"", data_fim:"" });
-  const [novoUsr, setNovoUsr] = useState({ nome:"", email:"", senha:"", papel:"gestor_matriz", crp:"", empresa_vinculada_id:"" });
+  const [novoUsr, setNovoUsr] = useState({ nome:"", email:"", senha:"Senha@010203", papel:"gestor_matriz", crp:"", empresa_vinculada_id:"", forcar_troca:true });
   const [empresaSel, setEmpresaSel] = useState(null);
   const [usuarioEditando, setUsuarioEditando] = useState(null);
 
@@ -105,8 +105,8 @@ export default function PainelPrincipal() {
     const r = await fetch(`${API}/usuarios`,{method:"POST",headers,body:JSON.stringify(novoUsr)});
     const d = await r.json();
     if (!r.ok) { setErro(d.erro); return; }
-    setMsg(`✅ Usuário "${novoUsr.nome}" criado!`);
-    setNovoUsr({nome:"",email:"",senha:"",papel:"gestor_matriz",crp:"",empresa_vinculada_id:""});
+    setMsg(`✅ Usuário "${novoUsr.nome}" criado! Senha padrão: Senha@010203`);
+    setNovoUsr({nome:"",email:"",senha:"Senha@010203",papel:"gestor_matriz",crp:"",empresa_vinculada_id:"",forcar_troca:true});
     carregarTudo(); setView("usuarios");
   }
 
@@ -694,13 +694,8 @@ export default function PainelPrincipal() {
                         )}
                       </p>
                       <p className="text-xs text-gray-400 mt-0.5"><BadgeRisco valor={a.status}/></p>
-                      {a.status==='coletada' && (
-                        <p className="text-xs text-purple-600 font-medium mt-0.5">⚡ Coleta completa — pronta para processar!</p>
-                      )}
                     </div>
-                    <Btn variant={a.status==='coletada'?'primary':'ghost'} onClick={()=>verResultados(a)} className="text-xs">
-                      {a.status==='coletada'?'Processar agora →':'Ver resultados'}
-                    </Btn>
+                    <Btn variant="ghost" onClick={()=>verResultados(a)} className="text-xs">Ver resultados</Btn>
                   </div>
                   <BarraProgresso coletadas={parseInt(a.respostas_coletadas)||0} total={parseInt(a.setor_total_funcionarios)||0}/>
                 </Card>
@@ -866,17 +861,49 @@ export default function PainelPrincipal() {
                   <th className="px-4 py-3"></th>
                 </tr></thead>
                 <tbody>{usuarios.map(u=>(
-                  <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-800">{u.nome}</td>
+                  <tr key={u.id} className={`border-b border-gray-50 hover:bg-gray-50 ${u.ativo===false?'opacity-50':''}`}>
+                    <td className="px-4 py-3 text-gray-800">
+                      {u.nome}
+                      {u.ativo===false && <span className="ml-2 text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">Desabilitado</span>}
+                    </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{u.email}</td>
                     <td className="px-4 py-3 text-center"><BadgeRisco valor={u.papel}/></td>
                     <td className="px-4 py-3 text-center text-xs text-gray-400">{u.empresa_nome||"—"}</td>
                     <td className="px-4 py-3 text-right">
-                      <Btn variant="ghost" className="text-xs" onClick={()=>{
-                        setUsuarioEditando(u);
-                        setNovoUsr({nome:u.nome,email:u.email,senha:"",papel:u.papel,crp:u.crp||"",empresa_vinculada_id:u.empresa_vinculada_id||""});
-                        setView("editar_usuario");
-                      }}>Editar</Btn>
+                      <div className="flex gap-1 justify-end">
+                        {u.ativo!==false && (
+                          <Btn variant="ghost" className="text-xs" onClick={()=>{
+                            setUsuarioEditando(u);
+                            setNovoUsr({nome:u.nome,email:u.email,senha:"",papel:u.papel,crp:u.crp||"",empresa_vinculada_id:u.empresa_vinculada_id||"",forcar_troca:false});
+                            setView("editar_usuario");
+                          }}>Editar</Btn>
+                        )}
+                        {u.ativo!==false && (
+                          <Btn variant="ghost" className="text-xs text-orange-600" onClick={async()=>{
+                            if (!confirm(`Resetar senha de "${u.nome}" para Senha@010203?`)) return;
+                            const r = await fetch(`${API}/usuarios/${u.id}`,{
+                              method:"PUT", headers,
+                              body:JSON.stringify({nome:u.nome,email:u.email,papel:u.papel,crp:u.crp||"",empresa_vinculada_id:u.empresa_vinculada_id||"",senha:"Senha@010203",forcar_troca:true})
+                            });
+                            if (r.ok) setMsg(`✅ Senha de "${u.nome}" resetada para Senha@010203`);
+                            else setErro("Erro ao resetar senha");
+                          }}>🔑 Reset</Btn>
+                        )}
+                        {u.id !== usuario.id && (
+                          u.ativo===false
+                          ? <Btn variant="ghost" className="text-xs text-green-600" onClick={async()=>{
+                              const r = await fetch(`${API}/usuarios/${u.id}/ativo`,{method:"PATCH",headers,body:JSON.stringify({ativo:true})});
+                              if (r.ok) { setMsg(`✅ "${u.nome}" reativado!`); carregarTudo(); }
+                              else setErro("Erro ao reativar usuário");
+                            }}>✅ Reativar</Btn>
+                          : <Btn variant="ghost" className="text-xs text-red-600" onClick={async()=>{
+                              if (!confirm(`Desabilitar "${u.nome}"? Ele não conseguirá mais fazer login.`)) return;
+                              const r = await fetch(`${API}/usuarios/${u.id}/ativo`,{method:"PATCH",headers,body:JSON.stringify({ativo:false})});
+                              if (r.ok) { setMsg(`⛔ "${u.nome}" desabilitado!`); carregarTudo(); }
+                              else setErro("Erro ao desabilitar usuário");
+                            }}>⛔ Desabilitar</Btn>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}</tbody>
@@ -898,7 +925,21 @@ export default function PainelPrincipal() {
                 <p className="text-xs text-gray-400 mt-1">💡 Sugerido automaticamente — edite se quiser usar outro e-mail</p>
               )}
             </div>
-            <Input label="Senha *" required type="password" value={novoUsr.senha} onChange={e=>setNovoUsr({...novoUsr,senha:e.target.value})}/>
+
+            {/* SENHA COM PADRÃO VISÍVEL */}
+            <div>
+              <Input label="Senha *" required type="text" value={novoUsr.senha} onChange={e=>setNovoUsr({...novoUsr,senha:e.target.value})}/>
+              <p className="text-xs text-blue-600 mt-1">🔑 Senha padrão preenchida automaticamente — altere se quiser definir outra</p>
+            </div>
+
+            {/* CHECKBOX FORÇAR TROCA */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={novoUsr.forcar_troca}
+                onChange={e=>setNovoUsr({...novoUsr,forcar_troca:e.target.checked})}
+                className="w-4 h-4 text-blue-600 rounded"/>
+              <span className="text-sm text-gray-700">Forçar troca de senha no primeiro acesso</span>
+            </label>
+
             <Select label="Perfil *" value={novoUsr.papel} onChange={e=>setNovoUsr({...novoUsr,papel:e.target.value})}>
               <option value="psicologo">Psicólogo</option>
               <option value="gestor_matriz">Gestor Matriz</option>
@@ -927,10 +968,6 @@ export default function PainelPrincipal() {
               </Select>
             )}
             <Input label={novoUsr.papel==="psicologo" ? "CRP *" : "CRP (opcional)"} placeholder="CRP 00/000000" value={novoUsr.crp} onChange={e=>setNovoUsr({...novoUsr,crp:e.target.value})}/>
-            <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
-              A senha deve ter: mínimo 8 caracteres, 1 maiúscula, 1 minúscula, 1 número e 1 símbolo (ex: Empresa@2025).
-              O usuário será solicitado a trocar a senha no primeiro acesso.
-            </div>
             <div className="flex gap-2 pt-1">
               <Btn type="submit">Criar usuário</Btn>
               <Btn variant="secondary" onClick={()=>setView("usuarios")}>Cancelar</Btn>

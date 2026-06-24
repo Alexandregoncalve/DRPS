@@ -19,6 +19,12 @@ module.exports = (pool) => {
       const { rows } = await pool.query('SELECT * FROM usuarios WHERE email = $1', [sanitize(email)]);
       if (!rows.length) return res.status(401).json({ erro: 'Credenciais inválidas' });
       const usuario = rows[0];
+
+      // Verificar se usuário está ativo
+      if (usuario.ativo === false) {
+        return res.status(403).json({ erro: 'Usuário desabilitado. Entre em contato com o administrador.' });
+      }
+
       const ok = await bcrypt.compare(senha, usuario.senha_hash);
       if (!ok) {
         await audit(pool, 'LOGIN_FALHOU', null, { email }, req);
