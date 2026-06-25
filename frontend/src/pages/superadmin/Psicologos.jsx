@@ -1,6 +1,4 @@
 // pages/superadmin/Psicologos.jsx
-// Corrigido: seletor de papel ao criar + coluna "Avaliações" (sem tradução)
-
 import { useEffect, useState, useCallback } from 'react';
 import { useSuperAdmin } from '../../contexts/SuperAdminContext';
 
@@ -11,11 +9,57 @@ const PAPEIS = [
   { value: 'gestor_filial', label: 'Gestor Filial',   cor: '#f59e0b' },
 ];
 
-const PAPEL_COR = Object.fromEntries(PAPEIS.map(p => [p.value, p.cor]));
+const PAPEL_COR   = Object.fromEntries(PAPEIS.map(p => [p.value, p.cor]));
 const PAPEL_LABEL = Object.fromEntries(PAPEIS.map(p => [p.value, p.label]));
 
+const PAPEL_DESC = {
+  admin:         '🔧 Acesso total à organização — gerencia avaliações, empresas e usuários.',
+  psicologo:     '🧠 Cria e gerencia avaliações e laudos das suas empresas.',
+  gestor_matriz: '🏢 Somente leitura — vê resultados de toda a rede de filiais.',
+  gestor_filial: '🏬 Somente leitura — vê resultados da sua filial e acompanha o plano de ação.',
+};
+
+// ── Componente campo senha com mostrar/ocultar ────────────────────────────
+function CampoSenha({ label, value, onChange, placeholder = '' }) {
+  const [ver, setVer] = useState(false);
+  return (
+    <div style={{ marginBottom: '1rem' }}>
+      <label style={{ display: 'block', color: '#94a3b8', fontSize: 12, marginBottom: 5 }}>{label}</label>
+      <div style={{ position: 'relative' }}>
+        <input
+          type={ver ? 'text' : 'password'}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          autoComplete="new-password"
+          style={{
+            width: '100%', padding: '0.65rem 4.5rem 0.65rem 0.875rem',
+            background: '#0f172a', border: '1px solid #334155',
+            borderRadius: 8, color: '#f1f5f9', fontSize: 14,
+            outline: 'none', boxSizing: 'border-box',
+          }}
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          onMouseDown={e => { e.preventDefault(); setVer(v => !v); }}
+          style={{
+            position: 'absolute', right: 10, top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'none', border: 'none',
+            color: '#6366f1', fontSize: 12,
+            cursor: 'pointer', fontWeight: 600, padding: 4,
+          }}
+        >
+          {ver ? 'Ocultar' : 'Mostrar'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function BadgePapel({ papel }) {
-  const cor = PAPEL_COR[papel] || '#64748b';
+  const cor   = PAPEL_COR[papel]   || '#64748b';
   const label = PAPEL_LABEL[papel] || papel;
   return (
     <span style={{
@@ -99,11 +143,8 @@ export default function Psicologos() {
   async function criar() {
     setSaving(true); setErro('');
     try {
-      await api('/api/superadmin/psicologos', {
-        method: 'POST', body: JSON.stringify(form),
-      });
-      setModal(null); setForm({});
-      carregar();
+      await api('/api/superadmin/psicologos', { method: 'POST', body: JSON.stringify(form) });
+      setModal(null); setForm({}); carregar();
     } catch (e) { setErro(e.message); }
     finally { setSaving(false); }
   }
@@ -111,11 +152,8 @@ export default function Psicologos() {
   async function editar() {
     setSaving(true); setErro('');
     try {
-      await api(`/api/superadmin/psicologos/${sel.id}`, {
-        method: 'PATCH', body: JSON.stringify(form),
-      });
-      setModal(null); setForm({});
-      carregar();
+      await api(`/api/superadmin/psicologos/${sel.id}`, { method: 'PATCH', body: JSON.stringify(form) });
+      setModal(null); setForm({}); carregar();
     } catch (e) { setErro(e.message); }
     finally { setSaving(false); }
   }
@@ -194,7 +232,7 @@ export default function Psicologos() {
                 <td style={{ ...tdStyle, color: '#64748b', fontSize: 12 }}>
                   {new Date(u.criado_em).toLocaleDateString('pt-BR')}
                 </td>
-                <td style={{ ...tdStyle }}>
+                <td style={tdStyle}>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <button onClick={() => { setSel(u); setForm({ nome: u.nome, email: u.email, papel: u.papel }); setModal('editar'); setErro(''); }}
                       style={btnSmall}>Editar</button>
@@ -224,7 +262,7 @@ export default function Psicologos() {
         </div>
       )}
 
-      {/* Modal Criar */}
+      {/* ── Modal Criar ─────────────────────────────────── */}
       {modal === 'criar' && (
         <Modal titulo="Novo usuário" onClose={() => setModal(null)}>
           <Campo label="Nome completo">
@@ -235,10 +273,15 @@ export default function Psicologos() {
             <input style={inputStyle} type="email" placeholder="simone@exemplo.com.br"
               value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
           </Campo>
-          <Campo label="Senha inicial (mín. 8 caracteres)">
-            <input style={inputStyle} type="password" placeholder="Nexa@2026"
-              value={form.senha || ''} onChange={e => setForm(f => ({ ...f, senha: e.target.value }))} />
-          </Campo>
+
+          {/* Senha com mostrar/ocultar */}
+          <CampoSenha
+            label="Senha inicial (mín. 8 caracteres)"
+            placeholder="Nexa@2026"
+            value={form.senha || ''}
+            onChange={e => setForm(f => ({ ...f, senha: e.target.value }))}
+          />
+
           <Campo label="Perfil de acesso">
             <select style={inputStyle} value={form.papel || 'psicologo'}
               onChange={e => setForm(f => ({ ...f, papel: e.target.value }))}>
@@ -248,13 +291,9 @@ export default function Psicologos() {
             </select>
           </Campo>
 
-          {/* Descrição do perfil selecionado */}
           <div style={{ background: '#0f172a', borderRadius: 8, padding: '10px 12px', marginBottom: '1rem' }}>
             <p style={{ color: '#64748b', fontSize: 12, margin: 0 }}>
-              {form.papel === 'admin'         && '🔧 Acesso total à organização — gerencia avaliações, empresas e usuários.'}
-              {form.papel === 'psicologo'     && '🧠 Cria e gerencia avaliações e laudos das suas empresas.'}
-              {form.papel === 'gestor_matriz' && '🏢 Somente leitura — vê resultados de toda a rede de filiais.'}
-              {form.papel === 'gestor_filial' && '🏬 Somente leitura — vê resultados da sua filial e acompanha o plano de ação.'}
+              {PAPEL_DESC[form.papel || 'psicologo']}
             </p>
             <p style={{ color: '#475569', fontSize: 11, margin: '6px 0 0' }}>
               O usuário deverá trocar a senha no primeiro login.
@@ -269,7 +308,7 @@ export default function Psicologos() {
         </Modal>
       )}
 
-      {/* Modal Editar */}
+      {/* ── Modal Editar ─────────────────────────────────── */}
       {modal === 'editar' && sel && (
         <Modal titulo={`Editar — ${sel.nome || sel.email}`} onClose={() => setModal(null)}>
           <Campo label="Nome">
@@ -296,14 +335,16 @@ export default function Psicologos() {
         </Modal>
       )}
 
-      {/* Modal Senha */}
+      {/* ── Modal Redefinir Senha ─────────────────────────── */}
       {modal === 'senha' && sel && (
         <Modal titulo={`Redefinir senha — ${sel.email}`} onClose={() => setModal(null)}>
-          <Campo label="Nova senha (mín. 8 caracteres)">
-            <input style={inputStyle} type="password" placeholder="Nova@Senha123"
-              value={form.nova_senha || ''}
-              onChange={e => setForm(f => ({ ...f, nova_senha: e.target.value }))} />
-          </Campo>
+          {/* Senha com mostrar/ocultar */}
+          <CampoSenha
+            label="Nova senha (mín. 8 caracteres)"
+            placeholder="Nova@Senha123"
+            value={form.nova_senha || ''}
+            onChange={e => setForm(f => ({ ...f, nova_senha: e.target.value }))}
+          />
           <p style={{ color: '#64748b', fontSize: 12, marginBottom: '1rem' }}>
             O usuário deverá trocar a senha no próximo login.
           </p>
@@ -317,7 +358,7 @@ export default function Psicologos() {
         </Modal>
       )}
 
-      {/* Modal Avaliações */}
+      {/* ── Modal Avaliações ─────────────────────────────── */}
       {modal === 'avaliacoes' && sel && (
         <Modal titulo={`Avaliações — ${sel.nome || sel.email}`} onClose={() => setModal(null)}>
           <div style={{ maxHeight: 400, overflowY: 'auto' }}>
@@ -344,7 +385,7 @@ export default function Psicologos() {
   );
 }
 
-const tdStyle   = { padding: '0.875rem 1rem', color: '#e2e8f0', fontSize: 13, verticalAlign: 'middle' };
+const tdStyle      = { padding: '0.875rem 1rem', color: '#e2e8f0', fontSize: 13, verticalAlign: 'middle' };
 const btnPrimario  = { padding: '0.6rem 1.25rem', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 const btnSecundario = { padding: '0.6rem 1.25rem', background: 'transparent', color: '#94a3b8', border: '1px solid #334155', borderRadius: 8, fontSize: 13, cursor: 'pointer' };
-const btnSmall  = { padding: '3px 10px', background: '#0f172a', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 12, cursor: 'pointer' };
+const btnSmall     = { padding: '3px 10px', background: '#0f172a', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 12, cursor: 'pointer' };

@@ -40,7 +40,10 @@ module.exports = (pool) => {
 
       const { rows } = await pool.query(query, params);
       res.json(rows);
-    } catch (e) { console.error(e); res.status(500).json({ erro: 'Erro interno' }); }
+    } catch (e) {
+      console.error('[empresas GET]', e);
+      res.status(500).json({ erro: 'Erro interno' });
+    }
   });
 
   // GET /api/empresas/todas — matrizes + filiais para dropdown de avaliação
@@ -49,14 +52,14 @@ module.exports = (pool) => {
     try {
       let query, params = [];
       if (papel === 'admin') {
-        query = `SELECT e.*, m.nome as matriz_nome 
-                 FROM empresas e 
+        query = `SELECT e.*, m.nome as matriz_nome
+                 FROM empresas e
                  LEFT JOIN empresas m ON m.id = e.matriz_id
                  WHERE e.organizacao_id = $1
                  ORDER BY e.tipo, e.nome`;
         params = [organizacao_id];
       } else {
-        query = `SELECT DISTINCT e.*, m.nome as matriz_nome 
+        query = `SELECT DISTINCT e.*, m.nome as matriz_nome
                  FROM empresas e
                  LEFT JOIN empresas m ON m.id = e.matriz_id
                  JOIN psicologo_empresa pe ON (pe.empresa_id = e.id OR pe.empresa_id = e.matriz_id)
@@ -66,7 +69,10 @@ module.exports = (pool) => {
       }
       const { rows } = await pool.query(query, params);
       res.json(rows);
-    } catch (e) { console.error(e); res.status(500).json({ erro: 'Erro interno' }); }
+    } catch (e) {
+      console.error('[empresas/todas]', e);
+      res.status(500).json({ erro: 'Erro interno' });
+    }
   });
 
   // GET /api/empresas/:id/filiais
@@ -86,21 +92,41 @@ module.exports = (pool) => {
         GROUP BY e.id ORDER BY e.nome
       `, [req.params.id]);
       res.json(rows);
-    } catch (e) { res.status(500).json({ erro: 'Erro interno' }); }
+    } catch (e) {
+      console.error('[empresas/filiais]', e);
+      res.status(500).json({ erro: 'Erro interno' });
+    }
   });
 
   // POST /api/empresas
   router.post('/', autenticar, exigirPapel('admin', 'psicologo'), rateLimit(30, 60000), async (req, res) => {
     const { nome, cnpj, total_funcionarios, tipo, matriz_id } = req.body;
     if (!nome) return res.status(400).json({ erro: 'Nome obrigatório' });
+
+    // organizacao_id sempre vem do usuário logado — nunca pode ser nulo
+    const organizacao_id = req.usuario.organizacao_id;
+    if (!organizacao_id)
+      return res.status(400).json({ erro: 'Usuário sem organização vinculada. Contate o Super Admin.' });
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+
+      // ✅ CORRIGIDO: organizacao_id incluído no INSERT
       const { rows } = await client.query(
-        'INSERT INTO empresas (nome, cnpj, total_funcionarios, tipo, matriz_id) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-        [sanitize(nome), sanitize(cnpj) || null, parseInt(total_funcionarios) || null, tipo || 'matriz', matriz_id || null]
+        `INSERT INTO empresas (nome, cnpj, total_funcionarios, tipo, matriz_id, organizacao_id)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [
+          sanitize(nome),
+          sanitize(cnpj) || null,
+          parseInt(total_funcionarios) || null,
+          tipo || 'matriz',
+          matriz_id || null,
+          organizacao_id,
+        ]
       );
       const empresa = rows[0];
+
       if (req.usuario.papel === 'psicologo') {
         const empVinc = tipo === 'filial' && matriz_id ? matriz_id : empresa.id;
         await client.query(
@@ -108,17 +134,20 @@ module.exports = (pool) => {
           [req.usuario.id, empVinc]
         );
       }
+
       await client.query('COMMIT');
       await audit(pool, 'EMPRESA_CRIADA', req.usuario.id, { nome, tipo }, req);
       res.json(empresa);
     } catch (e) {
       await client.query('ROLLBACK');
-      console.error(e);
+      console.error('[empresas POST]', e);
       res.status(500).json({ erro: 'Erro interno' });
-    } finally { client.release(); }
+    } finally {
+      client.release();
+    }
   });
 
-  // GET /api/empresas/:id/setores
+  // GET /api/empresas/:empresaId/setores
   router.get('/:empresaId/setores', autenticar, async (req, res) => {
     const { papel, empresa_vinculada_id } = req.usuario;
     if (papel === 'gestor_filial' && req.params.empresaId !== empresa_vinculada_id)
@@ -134,20 +163,27 @@ module.exports = (pool) => {
         GROUP BY s.id ORDER BY s.nome
       `, [req.params.empresaId]);
       res.json(rows);
-    } catch (e) { res.status(500).json({ erro: 'Erro interno' }); }
+    } catch (e) {
+      console.error('[empresas/setores GET]', e);
+      res.status(500).json({ erro: 'Erro interno' });
+    }
   });
 
   // POST /api/empresas/setores
   router.post('/setores', autenticar, exigirPapel('admin', 'psicologo'), rateLimit(50, 60000), async (req, res) => {
     const { empresa_id, nome, total_funcionarios } = req.body;
-    if (!empresa_id || !nome) return res.status(400).json({ erro: 'Empresa e nome obrigatórios' });
+    if (!empresa_id || !nome)
+      return res.status(400).json({ erro: 'Empresa e nome obrigatórios' });
     try {
       const { rows } = await pool.query(
         'INSERT INTO setores (empresa_id, nome, total_trabalhadores, total_funcionarios) VALUES ($1,$2,$3,$3) RETURNING *',
         [empresa_id, sanitize(nome), parseInt(total_funcionarios) || 0]
       );
       res.json(rows[0]);
-    } catch (e) { res.status(500).json({ erro: 'Erro interno' }); }
+    } catch (e) {
+      console.error('[setores POST]', e);
+      res.status(500).json({ erro: 'Erro interno' });
+    }
   });
 
   return router;

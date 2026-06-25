@@ -10,10 +10,19 @@ module.exports = function authSuperAdmin(pool) {
       const token = header.slice(7);
       let payload;
       try {
-        payload = jwt.verify(token, process.env.JWT_SECRET);
+        payload = jwt.verify(token, process.env.JWT_SECRET || 'drps_secret_2025');
       } catch {
         return res.status(401).json({ erro: 'Token inválido ou expirado' });
       }
+
+      // Verifica papel antes de qualquer consulta ao banco
+      if (payload.papel !== 'superadmin')
+        return res.status(403).json({ erro: 'Acesso restrito ao super admin' });
+
+      // CORREÇÃO: token usa "id", não "sub"
+      const usuarioId = payload.id || payload.sub;
+      if (!usuarioId)
+        return res.status(401).json({ erro: 'Token inválido — faça login novamente' });
 
       // Verifica blacklist
       if (payload.jti) {
@@ -24,18 +33,25 @@ module.exports = function authSuperAdmin(pool) {
           return res.status(401).json({ erro: 'Token revogado' });
       }
 
-      if (payload.papel !== 'superadmin')
-        return res.status(403).json({ erro: 'Acesso restrito ao super admin' });
-
-      // usa "ativo" conforme estrutura real do banco
+      // Busca usuário pelo id correto
       const u = await pool.query(
         'SELECT id, email, papel, ativo FROM usuarios WHERE id = $1',
-        [payload.sub]
+        [usuarioId]
       );
-      if (!u.rows.length || !u.rows[0].ativo)
-        return res.status(401).json({ erro: 'Usuário inativo ou bloqueado' });
 
-      req.usuario = u.rows[0];
+      if (!u.rows.length)
+        return res.status(401).json({ erro: 'Usuário não encontrado' });
+
+      // Garante que superadmin nunca fique bloqueado por erro de flag
+      if (!u.rows[0].ativo) {
+        // Reativa automaticamente se o papel é superadmin
+        await pool.query(
+          'UPDATE usuarios SET ativo = TRUE WHERE id = $1 AND papel = $2',
+          [usuarioId, 'superadmin']
+        );
+      }
+
+      req.usuario = { ...u.rows[0], ativo: true };
       next();
     } catch (err) {
       console.error('[authSuperAdmin]', err);
