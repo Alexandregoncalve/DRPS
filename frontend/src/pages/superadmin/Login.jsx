@@ -4,17 +4,22 @@ import { useSuperAdmin } from '../../contexts/SuperAdminContext';
 
 export default function SuperAdminLogin() {
   const { login } = useSuperAdmin();
-  const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState('');
-  const [erro,  setErro]  = useState('');
-  const [load,  setLoad]  = useState(false);
+  const [email,    setEmail]    = useState('');
+  const [senha,    setSenha]    = useState('');
+  const [verSenha, setVerSenha] = useState(false);
+  const [erro,     setErro]     = useState('');
+  const [load,     setLoad]     = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setErro(''); setLoad(true);
-    try { await login(email, senha); }
-    catch (err) { setErro(err.message); }
-    finally { setLoad(false); }
+    try {
+      await login(email.trim().toLowerCase(), senha);
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setLoad(false);
+    }
   }
 
   return (
@@ -37,32 +42,77 @@ export default function SuperAdminLogin() {
           <p style={{ color: '#94a3b8', fontSize: 13, marginTop: 4 }}>Painel Super Admin</p>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} autoComplete="off">
+          {/* E-mail */}
           <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>E-mail</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-              required autoFocus autoComplete="username"
-              style={inputStyle} placeholder="admin@nexadrps.com.br" />
+            <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>
+              E-mail
+            </label>
+            <input
+              type="email"
+              required
+              autoFocus
+              autoComplete="username"
+              placeholder="admin@nexadrps.com.br"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              style={inputStyle}
+            />
           </div>
+
+          {/* Senha com mostrar/ocultar */}
           <div style={{ marginBottom: '1.5rem' }}>
-            <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>Senha</label>
-            <input type="password" value={senha} onChange={e => setSenha(e.target.value)}
-              required autoComplete="current-password"
-              style={inputStyle} placeholder="••••••••" />
+            <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>
+              Senha
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={verSenha ? "text" : "password"}
+                required
+                autoComplete="current-password"
+                placeholder="••••••••"
+                value={senha}
+                onChange={e => setSenha(e.target.value)}
+                style={{ ...inputStyle, paddingRight: 80 }}
+              />
+              <button
+                type="button"
+                onClick={() => setVerSenha(v => !v)}
+                style={{
+                  position: 'absolute', right: 10, top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none', border: 'none',
+                  color: '#6366f1', fontSize: 12,
+                  cursor: 'pointer', fontWeight: 600,
+                }}
+              >
+                {verSenha ? 'Ocultar' : 'Mostrar'}
+              </button>
+            </div>
           </div>
+
           {erro && (
             <div style={{
               background: '#450a0a', border: '1px solid #7f1d1d', borderRadius: 8,
               padding: '0.75rem 1rem', color: '#fca5a5', fontSize: 13, marginBottom: '1rem',
             }}>{erro}</div>
           )}
-          <button type="submit" disabled={load} style={{
-            width: '100%', padding: '0.75rem',
-            background: '#6366f1', color: '#fff',
-            border: 'none', borderRadius: 10,
-            fontSize: 15, fontWeight: 600, cursor: load ? 'not-allowed' : 'pointer',
-          }}>{load ? 'Entrando…' : 'Entrar'}</button>
+
+          <button
+            type="submit"
+            disabled={load}
+            style={{
+              width: '100%', padding: '0.75rem',
+              background: load ? '#4338ca' : '#6366f1',
+              color: '#fff', border: 'none', borderRadius: 10,
+              fontSize: 15, fontWeight: 600,
+              cursor: load ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {load ? 'Entrando…' : 'Entrar'}
+          </button>
         </form>
+
         <p style={{ color: '#475569', fontSize: 11, textAlign: 'center', marginTop: '1.5rem' }}>
           Acesso restrito — NeXa DRPS v3.0
         </p>

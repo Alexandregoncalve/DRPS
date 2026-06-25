@@ -3,23 +3,24 @@ import { useAuth, API } from "../contexts/AuthContext";
 import { Card, Btn, Alert } from "../components/ui";
 
 const REQUISITOS = [
-  { regex: /.{8,}/,      label: "Mínimo 8 caracteres" },
-  { regex: /[A-Z]/,      label: "Uma letra maiúscula" },
-  { regex: /[a-z]/,      label: "Uma letra minúscula" },
-  { regex: /[0-9]/,      label: "Um número" },
+  { regex: /.{8,}/,        label: "Mínimo 8 caracteres" },
+  { regex: /[A-Z]/,        label: "Uma letra maiúscula" },
+  { regex: /[a-z]/,        label: "Uma letra minúscula" },
+  { regex: /[0-9]/,        label: "Um número" },
   { regex: /[^A-Za-z0-9]/, label: "Um caractere especial (! @ # $ %)" },
 ];
 
-function CampoSenha({ label, value, onChange, autoComplete }) {
+function CampoSenha({ label, value, onChange, autoComplete, placeholder = "••••••••" }) {
   const [ver, setVer] = useState(false);
   return (
-    <div className="space-y-1">
-      <label className="block text-sm font-medium text-gray-700">{label}</label>
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       <div className="relative">
         <input
           type={ver ? "text" : "password"}
           required
           autoComplete={autoComplete}
+          placeholder={placeholder}
           value={value}
           onChange={onChange}
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-20"
@@ -44,16 +45,16 @@ export default function TrocarSenha() {
   const [erro,       setErro]       = useState("");
   const [loading,    setLoading]    = useState(false);
 
-  const req      = REQUISITOS.map(r => r.regex.test(novaSenha));
-  const todosOk  = req.every(Boolean);
-  const iguais   = novaSenha && novaSenha === confirmar;
+  const req     = REQUISITOS.map(r => r.regex.test(novaSenha));
+  const todosOk = req.every(Boolean);
+  const iguais  = novaSenha && novaSenha === confirmar;
 
   async function handleSubmit(e) {
     e.preventDefault();
     setErro("");
+    if (!senhaAtual.trim()) { setErro("Digite a senha atual."); return; }
     if (!todosOk)  { setErro("A senha não atende aos requisitos mínimos."); return; }
     if (!iguais)   { setErro("As senhas não coincidem."); return; }
-    if (!senhaAtual.trim()) { setErro("Digite a senha atual."); return; }
 
     setLoading(true);
     try {
@@ -83,20 +84,19 @@ export default function TrocarSenha() {
           <p className="text-sm text-gray-400 mt-1">
             Por segurança, troque sua senha temporária antes de continuar.
           </p>
-          {/* Mostra o email para o usuário saber qual conta está alterando */}
           {usuario?.email && (
             <div className="mt-3 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
               <p className="text-xs text-blue-600 font-medium">
-                Alterando senha de: <span className="font-bold">{usuario.email}</span>
+                Conta: <strong>{usuario.email}</strong>
               </p>
               <p className="text-xs text-blue-400 mt-0.5">
-                A senha temporária foi definida pelo administrador
+                Senha temporária definida pelo administrador
               </p>
             </div>
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
           <CampoSenha
             label="Senha atual (temporária)"
             value={senhaAtual}
@@ -116,7 +116,6 @@ export default function TrocarSenha() {
             autoComplete="new-password"
           />
 
-          {/* Requisitos */}
           <div className="bg-gray-50 rounded-lg p-3 space-y-1">
             {REQUISITOS.map((r, i) => (
               <div key={i} className={`text-xs flex items-center gap-2 ${req[i] ? "text-green-600" : "text-gray-400"}`}>
@@ -134,19 +133,13 @@ export default function TrocarSenha() {
 
           {erro && <Alert type="error">{erro}</Alert>}
 
-          <Btn
-            type="submit"
-            disabled={loading || !todosOk || !iguais || !senhaAtual}
-            className="w-full justify-center"
-          >
+          <Btn type="submit" disabled={loading || !todosOk || !iguais || !senhaAtual}
+            className="w-full justify-center">
             {loading ? "Salvando..." : "Definir nova senha"}
           </Btn>
 
-          <button
-            type="button"
-            onClick={logout}
-            className="text-xs text-gray-400 hover:text-gray-600 w-full text-center"
-          >
+          <button type="button" onClick={logout}
+            className="text-xs text-gray-400 hover:text-gray-600 w-full text-center">
             Sair
           </button>
         </form>

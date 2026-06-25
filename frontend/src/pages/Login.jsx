@@ -43,7 +43,6 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
 
-          {/* E-mail */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
             <input
@@ -57,7 +56,6 @@ export default function Login() {
             />
           </div>
 
-          {/* Senha com mostrar/ocultar */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
             <div className="relative">
@@ -89,8 +87,7 @@ export default function Login() {
 
         <div className="mt-6 pt-4 border-t border-gray-100 text-center">
           <p className="text-sm text-gray-400 mb-2">Ainda não tem conta?</p>
-          <button
-            onClick={() => setCadastrando(true)}
+          <button onClick={() => setCadastrando(true)}
             className="text-sm text-blue-600 hover:underline font-medium">
             Criar conta gratuitamente →
           </button>
