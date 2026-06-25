@@ -67,6 +67,8 @@ app.use('/api/empresas',                  require('./routes/empresas')(pool));
 app.use('/api/avaliacoes',                require('./routes/avaliacoes')(pool));
 app.use('/api/responder',                 require('./routes/responder')(pool));
 app.use('/api/usuarios',                  require('./routes/usuarios')(pool));
+app.use('/api/laudo', require('./routes/laudo')(pool));
+
 
 // ── Rotas Super Admin ─────────────────────────────────────────────────────────
 app.use('/api/superadmin/auth',       limiterLogin, require('./routes/superadmin/auth')(pool));

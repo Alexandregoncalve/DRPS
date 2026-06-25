@@ -89,7 +89,7 @@ module.exports = function(pool) {
       if (existe.rows.length)
         return res.status(409).json({ erro: 'E-mail já cadastrado' });
 
-      const hash = await bcrypt.hash(senha, 10);
+      const hash = await bcrypt.hash(senha, 12);
       const r = await pool.query(
         `INSERT INTO usuarios (nome, email, senha_hash, papel, precisa_trocar_senha, ativo)
          VALUES ($1, $2, $3, $4, TRUE, TRUE)
@@ -210,7 +210,7 @@ module.exports = function(pool) {
       if (!nova_senha || nova_senha.length < 8)
         return res.status(400).json({ erro: 'Senha deve ter ao menos 8 caracteres' });
 
-      const hash = await bcrypt.hash(nova_senha, 10);
+      const hash = await bcrypt.hash(nova_senha, 12);
       const r = await pool.query(
         `UPDATE usuarios SET senha_hash = $1, precisa_trocar_senha = TRUE
          WHERE id = $2 AND papel != 'superadmin'
