@@ -35,7 +35,8 @@ export default function PainelPrincipal() {
   const [novoSetor, setNovoSetor] = useState({ nome:"", total_funcionarios:"" });
   const [adicionandoSetor, setAdicionandoSetor] = useState(false);
   const [novaAval, setNovaAval] = useState({ empresa_id:"", setor_id:"", data_fim:"" });
-  const [novoUsr, setNovoUsr] = useState({ nome:"", email:"", senha:"Senha@010203", papel:"gestor_matriz", crp:"", empresa_vinculada_id:"", forcar_troca:true });
+  const [novoUsr, setNovoUsr] = useState({ nome:"", email:"", senha:"", papel:"gestor_matriz", crp:"", empresa_vinculada_id:"", forcar_troca:true });
+  const [mostrarSenha, setMostrarSenha] = useState(false);
   const [empresaSel, setEmpresaSel] = useState(null);
   const [usuarioEditando, setUsuarioEditando] = useState(null);
 
@@ -65,12 +66,8 @@ export default function PainelPrincipal() {
   }
 
   function sugerirEmail(nomeEmpresa) {
-    const slug = nomeEmpresa
-      .toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-      .replace(/[^a-z0-9]+/g,'')
-      .slice(0,30);
-    return `gestor.${slug}@nexa.com.br`;
+    // Não sugere mais email automático — deixa em branco para o admin preencher
+    return "";
   }
 
   async function criarEmpresa(e) {
@@ -926,10 +923,27 @@ export default function PainelPrincipal() {
               )}
             </div>
 
-            {/* SENHA COM PADRÃO VISÍVEL */}
+            {/* SENHA COM BOTÃO MOSTRAR */}
             <div>
-              <Input label="Senha *" required type="text" value={novoUsr.senha} onChange={e=>setNovoUsr({...novoUsr,senha:e.target.value})}/>
-              <p className="text-xs text-blue-600 mt-1">🔑 Senha padrão preenchida automaticamente — altere se quiser definir outra</p>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Senha *</label>
+              <div className="relative">
+                <input
+                  type={mostrarSenha ? "text" : "password"}
+                  required
+                  placeholder="Senha@010203 (padrão)"
+                  value={novoUsr.senha}
+                  onChange={e=>setNovoUsr({...novoUsr,senha:e.target.value})}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-20"
+                />
+                <button type="button"
+                  onClick={()=>setMostrarSenha(!mostrarSenha)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-blue-600 hover:underline">
+                  {mostrarSenha ? "Ocultar" : "Mostrar"}
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                Deixe em branco para usar a senha padrão: <span className="font-mono">Senha@010203</span>
+              </p>
             </div>
 
             {/* CHECKBOX FORÇAR TROCA */}

@@ -9,7 +9,7 @@ module.exports = (pool) => {
 
   // GET /api/empresas
   router.get('/', autenticar, async (req, res) => {
-    const { papel, id: userId, empresa_vinculada_id } = req.usuario;
+    const { papel, id: userId, empresa_vinculada_id, organizacao_id } = req.usuario;
     try {
       let query, params = [];
       const select = `
@@ -24,11 +24,12 @@ module.exports = (pool) => {
         LEFT JOIN avaliacoes a ON a.setor_id = s.id`;
 
       if (papel === 'admin') {
-        query = select + ` WHERE e.tipo = 'matriz' GROUP BY e.id ORDER BY e.nome`;
+        query = select + ` WHERE e.tipo = 'matriz' AND e.organizacao_id = $1 GROUP BY e.id ORDER BY e.nome`;
+        params = [organizacao_id];
       } else if (papel === 'psicologo') {
         query = select + ` JOIN psicologo_empresa pe ON pe.empresa_id = e.id AND pe.psicologo_id = $1
-          WHERE e.tipo = 'matriz' GROUP BY e.id ORDER BY e.nome`;
-        params = [userId];
+          WHERE e.tipo = 'matriz' AND e.organizacao_id = $2 GROUP BY e.id ORDER BY e.nome`;
+        params = [userId, organizacao_id];
       } else if (papel === 'gestor_matriz') {
         query = select + ` WHERE e.id = $1 AND e.tipo = 'matriz' GROUP BY e.id`;
         params = [empresa_vinculada_id];
@@ -44,22 +45,24 @@ module.exports = (pool) => {
 
   // GET /api/empresas/todas — matrizes + filiais para dropdown de avaliação
   router.get('/todas', autenticar, async (req, res) => {
-    const { papel, id: userId } = req.usuario;
+    const { papel, id: userId, organizacao_id } = req.usuario;
     try {
       let query, params = [];
       if (papel === 'admin') {
         query = `SELECT e.*, m.nome as matriz_nome 
                  FROM empresas e 
-                 LEFT JOIN empresas m ON m.id = e.matriz_id 
+                 LEFT JOIN empresas m ON m.id = e.matriz_id
+                 WHERE e.organizacao_id = $1
                  ORDER BY e.tipo, e.nome`;
+        params = [organizacao_id];
       } else {
         query = `SELECT DISTINCT e.*, m.nome as matriz_nome 
                  FROM empresas e
                  LEFT JOIN empresas m ON m.id = e.matriz_id
                  JOIN psicologo_empresa pe ON (pe.empresa_id = e.id OR pe.empresa_id = e.matriz_id)
-                 WHERE pe.psicologo_id = $1
+                 WHERE pe.psicologo_id = $1 AND e.organizacao_id = $2
                  ORDER BY e.tipo, e.nome`;
-        params = [userId];
+        params = [userId, organizacao_id];
       }
       const { rows } = await pool.query(query, params);
       res.json(rows);

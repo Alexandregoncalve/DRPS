@@ -18,12 +18,13 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,
 });
 
-app.get('/api/health', (req, res) => res.json({ ok: true, versao: '2.1.0' }));
-app.use('/api/auth',       require('./routes/auth')(pool));
-app.use('/api/empresas',   require('./routes/empresas')(pool));
-app.use('/api/avaliacoes', require('./routes/avaliacoes')(pool));
-app.use('/api/responder',  require('./routes/responder')(pool));
-app.use('/api/usuarios',   require('./routes/usuarios')(pool));
+app.get('/api/health', (req, res) => res.json({ ok: true, versao: '2.2.0' }));
+app.use('/api/auth',          require('./routes/auth')(pool));
+app.use('/api/organizacoes',  require('./routes/organizacoes')(pool));
+app.use('/api/empresas',      require('./routes/empresas')(pool));
+app.use('/api/avaliacoes',    require('./routes/avaliacoes')(pool));
+app.use('/api/responder',     require('./routes/responder')(pool));
+app.use('/api/usuarios',      require('./routes/usuarios')(pool));
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

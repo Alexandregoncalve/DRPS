@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { useAuth, API } from "../contexts/AuthContext";
 import { Card, Btn, Input, Alert } from "../components/ui";
+import CadastroOrganizacao from "./CadastroOrganizacao";
 
 export default function Login() {
   const { onLogin } = useAuth();
   const [form, setForm] = useState({ email: "", senha: "" });
   const [erro, setErro] = useState("");
   const [loading, setLoading] = useState(false);
+  const [cadastrando, setCadastrando] = useState(false);
+
+  if (cadastrando) return <CadastroOrganizacao onVoltar={() => setCadastrando(false)} />;
 
   async function handleSubmit(e) {
     e.preventDefault(); setLoading(true); setErro("");
@@ -40,6 +44,16 @@ export default function Login() {
             {loading ? "Entrando..." : "Entrar"}
           </Btn>
         </form>
+
+        {/* LINK CRIAR CONTA */}
+        <div className="mt-6 pt-4 border-t border-gray-100 text-center">
+          <p className="text-sm text-gray-400 mb-2">Ainda não tem conta?</p>
+          <button
+            onClick={() => setCadastrando(true)}
+            className="text-sm text-blue-600 hover:underline font-medium">
+            Criar conta gratuitamente →
+          </button>
+        </div>
       </Card>
     </div>
   );
