@@ -12,6 +12,73 @@ const SETORES_COMUNS = [
   "Qualidade", "Compras", "Manutenção",
 ];
 
+// ── Dashboard Gerencial do Admin ─────────────────────────────────────────────
+function DashboardAdmin({ avaliacoes, onVerResultados }) {
+  const processadas = avaliacoes.filter(a => a.status === 'processada');
+  const contagem = { Crítico: 0, Alto: 0, Médio: 0, Baixo: 0 };
+  processadas.forEach(a => {
+    if (a.contagem) {
+      Object.keys(contagem).forEach(k => { contagem[k] += (a.contagem[k] || 0); });
+    }
+  });
+
+  if (processadas.length === 0) return null;
+
+  return (
+    <Card className="p-4 mb-6 border-l-4 border-l-blue-600">
+      <h3 className="text-sm font-bold text-gray-900 mb-1">📊 Painel Gerencial — Visão Consolidada</h3>
+      <p className="text-xs text-gray-500 mb-4">
+        {processadas.length} avaliação(ões) processada(s) em {new Set(avaliacoes.map(a => a.empresa_nome)).size} empresa(s)
+      </p>
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        {[
+          ['Crítico', 'bg-red-700',    'text-white',    'text-red-200'],
+          ['Alto',    'bg-red-400',    'text-white',    'text-red-50'],
+          ['Médio',   'bg-yellow-300', 'text-gray-900', 'text-yellow-800'],
+          ['Baixo',   'bg-green-500',  'text-white',    'text-green-50'],
+        ].map(([k, bg, tc, lc]) => (
+          <div key={k} className={`rounded-xl p-3 text-center ${bg}`}>
+            <p className={`text-2xl font-bold ${tc}`}>{contagem[k]}</p>
+            <p className={`text-xs font-semibold mt-1 ${lc}`}>{k}</p>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-2">
+        {processadas
+          .sort((a, b) => {
+            const ord = { Crítico: 4, Alto: 3, Médio: 2, Baixo: 1 };
+            const scoreA = (a.contagem?.Crítico || 0) * 4 + (a.contagem?.Alto || 0) * 3;
+            const scoreB = (b.contagem?.Crítico || 0) * 4 + (b.contagem?.Alto || 0) * 3;
+            return scoreB - scoreA;
+          })
+          .map(a => (
+            <div key={a.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+              <div>
+                <p className="text-xs font-medium text-gray-800">{a.empresa_nome} · {a.setor_nome}</p>
+                <div className="flex gap-2 mt-1">
+                  {['Crítico', 'Alto', 'Médio', 'Baixo'].map(k => (
+                    a.contagem?.[k] > 0 && (
+                      <span key={k} className={`text-xs px-1.5 py-0.5 rounded-full font-medium
+                        ${k === 'Crítico' ? 'bg-red-100 text-red-700' :
+                          k === 'Alto'    ? 'bg-orange-100 text-orange-700' :
+                          k === 'Médio'   ? 'bg-yellow-100 text-yellow-700' :
+                                           'bg-green-100 text-green-700'}`}>
+                        {a.contagem[k]} {k}
+                      </span>
+                    )
+                  ))}
+                </div>
+              </div>
+              <Btn variant="ghost" className="text-xs" onClick={() => onVerResultados(a)}>
+                Ver →
+              </Btn>
+            </div>
+          ))}
+      </div>
+    </Card>
+  );
+}
+
 export default function PainelPrincipal() {
   const { token, usuario } = useAuth();
   const isAdmin = usuario.papel === "admin";
@@ -22,6 +89,7 @@ export default function PainelPrincipal() {
   const [avaliacoes, setAvaliacoes] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [avalSelecionada, setAvalSelecionada] = useState(null);
+  const [avalCriada, setAvalCriada] = useState(null); // ← nova avaliação criada (para mostrar QR Code)
   const [resultados, setResultados] = useState(null);
   const [probabilidades, setProbabilidades] = useState({});
   const [msg, setMsg] = useState(""); const [erro, setErro] = useState("");
@@ -45,7 +113,11 @@ export default function PainelPrincipal() {
   useEffect(() => { carregarTudo(); }, []);
 
   async function carregarTudo() {
-    const [eR, aR, etR] = await Promise.all([fetch(`${API}/empresas`,{headers}), fetch(`${API}/avaliacoes`,{headers}), fetch(`${API}/empresas/todas`,{headers})]);
+    const [eR, aR, etR] = await Promise.all([
+      fetch(`${API}/empresas`,{headers}),
+      fetch(`${API}/avaliacoes`,{headers}),
+      fetch(`${API}/empresas/todas`,{headers})
+    ]);
     const [emps, avals, empsT] = await Promise.all([eR.json(), aR.json(), etR.json()]);
     setEmpresas(Array.isArray(emps)?emps:[]);
     setEmpresasTodas(Array.isArray(empsT)?empsT:[]);
@@ -63,11 +135,6 @@ export default function PainelPrincipal() {
     v=v.replace(/\D/g,'');
     if(v.length<=14) v=v.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2');
     return v;
-  }
-
-  function sugerirEmail(nomeEmpresa) {
-    // Não sugere mais email automático — deixa em branco para o admin preencher
-    return "";
   }
 
   async function criarEmpresa(e) {
@@ -93,8 +160,11 @@ export default function PainelPrincipal() {
     const r = await fetch(`${API}/avaliacoes`,{method:"POST",headers,body:JSON.stringify(novaAval)});
     const d = await r.json();
     if (!r.ok) { setErro(d.erro); return; }
-    setMsg(`✅ Avaliação criada!\n🔗 ${d.link_anonimo}`);
-    setNovaAval({empresa_id:"",setor_id:"",data_fim:""}); carregarTudo(); setView("avaliacoes");
+    // ✅ CORRIGIDO: guarda a avaliação criada e mostra QR Code aqui
+    setAvalCriada(d);
+    setNovaAval({empresa_id:"",setor_id:"",data_fim:""});
+    carregarTudo();
+    setView("avaliacao_criada");
   }
 
   async function criarUsuario(e) {
@@ -102,8 +172,8 @@ export default function PainelPrincipal() {
     const r = await fetch(`${API}/usuarios`,{method:"POST",headers,body:JSON.stringify(novoUsr)});
     const d = await r.json();
     if (!r.ok) { setErro(d.erro); return; }
-    setMsg(`✅ Usuário "${novoUsr.nome}" criado! Senha padrão: Senha@010203`);
-    setNovoUsr({nome:"",email:"",senha:"Senha@010203",papel:"gestor_matriz",crp:"",empresa_vinculada_id:"",forcar_troca:true});
+    setMsg(`✅ Usuário "${novoUsr.nome}" criado!`);
+    setNovoUsr({nome:"",email:"",senha:"",papel:"gestor_matriz",crp:"",empresa_vinculada_id:"",forcar_troca:true});
     carregarTudo(); setView("usuarios");
   }
 
@@ -120,20 +190,14 @@ export default function PainelPrincipal() {
 
   async function verResultados(aval) {
     setAvalSelecionada(aval);
-    setProcessando(true);
-    setMsg("");
+    setProcessando(true); setMsg("");
     try {
-      // Busca resultados existentes
       const r = await fetch(`${API}/avaliacoes/${aval.id}/resultados`,{headers});
       const d = await r.json();
-
-      // Inicializa probabilidades
       const p = {};
       for (let i = 1; i <= 13; i++) p[i] = 2;
       d.resultados?.forEach(x => { p[x.topico_num] = x.media_probabilidade || 2; });
       setProbabilidades(p);
-
-      // Se já tem respostas, processa automaticamente
       if (aval.total_respostas > 0) {
         const probs = Object.entries(p).map(([t,v])=>({topico_num:parseInt(t),valor:parseInt(v)}));
         await fetch(`${API}/avaliacoes/${aval.id}/probabilidades`,{method:"POST",headers,body:JSON.stringify({probabilidades:probs})});
@@ -143,43 +207,31 @@ export default function PainelPrincipal() {
       } else {
         setResultados(d);
       }
-    } catch(e) {
-      setErro("Erro ao carregar resultados.");
-    } finally {
-      setProcessando(false);
-    }
+    } catch(e) { setErro("Erro ao carregar resultados."); }
+    finally { setProcessando(false); }
     setView("resultados");
   }
 
   async function salvarProbabilidades() {
     if (processando) return;
-    setProcessando(true);
-    setErro("");
+    setProcessando(true); setErro("");
     try {
       const probs=Object.entries(probabilidades).map(([t,v])=>({topico_num:parseInt(t),valor:parseInt(v)}));
-      const r1 = await fetch(`${API}/avaliacoes/${avalSelecionada.id}/probabilidades`,{method:"POST",headers,body:JSON.stringify({probabilidades:probs})});
-      if (!r1.ok) { const d1 = await r1.json(); throw new Error(d1.erro || "Erro ao salvar probabilidades"); }
-
-      const r2 = await fetch(`${API}/avaliacoes/${avalSelecionada.id}/processar`,{method:"POST",headers});
-      if (!r2.ok) { const d2 = await r2.json(); throw new Error(d2.erro || "Erro ao processar matriz"); }
-
+      await fetch(`${API}/avaliacoes/${avalSelecionada.id}/probabilidades`,{method:"POST",headers,body:JSON.stringify({probabilidades:probs})});
+      await fetch(`${API}/avaliacoes/${avalSelecionada.id}/processar`,{method:"POST",headers});
       const r3 = await fetch(`${API}/avaliacoes/${avalSelecionada.id}/resultados`,{headers});
       setResultados(await r3.json());
       setMsg("✅ Matriz processada!");
-    } catch (e) {
-      setErro(e.message);
-    } finally {
-      setProcessando(false);
-    }
+    } catch (e) { setErro(e.message); }
+    finally { setProcessando(false); }
   }
 
-  // helpers semáforo
   function semaforoMatriz(v) {
     if (v==='Crítico') return {cor:'bg-red-600 text-white', icone:'🔴', label:'Crítico'};
     if (v==='Alto')    return {cor:'bg-orange-500 text-white', icone:'🟠', label:'Alto'};
     if (v==='Médio')   return {cor:'bg-yellow-400 text-gray-900', icone:'🟡', label:'Médio'};
     if (v==='Baixo')   return {cor:'bg-green-500 text-white', icone:'🟢', label:'Baixo'};
-    return {cor:'bg-gray-200 text-gray-600', icone:'⚪', label:v||'—'};
+    return {cor:'bg-gray-200 text-gray-600', icone:'⬜', label:v||'—'};
   }
   function semaforoGrav(v) {
     if (v==='Alta')   return 'text-red-600 font-semibold';
@@ -187,6 +239,7 @@ export default function PainelPrincipal() {
     if (v==='Baixa')  return 'text-green-600 font-semibold';
     return 'text-gray-400';
   }
+
   function exportarCSV() {
     if (!resultados?.resultados) return;
     const rows = [['Tópico','Gravidade','Probabilidade','Matriz de Risco','Fonte Geradora']];
@@ -204,8 +257,6 @@ export default function PainelPrincipal() {
   async function exportarPDF(ident = {}) {
     if (!resultados?.resultados) return;
     setMsg('⏳ Gerando PDF...');
-
-    // Captura radar da tela
     let radarImgData = null;
     try {
       const { default: html2canvas } = await import('html2canvas');
@@ -214,174 +265,116 @@ export default function PainelPrincipal() {
         const canvas = await html2canvas(radarEl, { scale: 2, backgroundColor: '#ffffff' });
         radarImgData = canvas.toDataURL('image/png');
       }
-    } catch(e) { console.warn('html2canvas:', e); }
-
+    } catch(e) {}
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     const data = new Date().toLocaleDateString('pt-BR');
-    const margem = 15;
-    const largura = 180;
-    let y = 15;
-
+    const margem = 15, largura = 180; let y = 15;
     function linha(texto, tamanho=10, negrito=false, cor=[30,30,30]) {
-      doc.setFontSize(tamanho);
-      doc.setFont('helvetica', negrito ? 'bold' : 'normal');
-      doc.setTextColor(...cor);
+      doc.setFontSize(tamanho); doc.setFont('helvetica', negrito ? 'bold' : 'normal'); doc.setTextColor(...cor);
       const linhas = doc.splitTextToSize(String(texto), largura);
-      linhas.forEach(l => {
-        if (y > 275) { doc.addPage(); y = 15; }
-        doc.text(l, margem, y);
-        y += tamanho * 0.45;
-      });
-      y += 1;
+      linhas.forEach(l => { if (y > 275) { doc.addPage(); y = 15; } doc.text(l, margem, y); y += tamanho * 0.45; }); y += 1;
     }
     function separador(cor=[200,200,200]) {
-      if (y > 275) { doc.addPage(); y = 15; }
-      doc.setDrawColor(...cor);
-      doc.line(margem, y, margem + largura, y);
-      y += 4;
+      doc.setDrawColor(...cor); doc.line(margem, y, margem + largura, y); y += 4;
     }
-    function retanguloColorido(texto, bgR, bgG, bgB, x, yPos, w, h=7) {
-      doc.setFillColor(bgR, bgG, bgB);
-      doc.roundedRect(x, yPos, w, h, 2, 2, 'F');
-      doc.setTextColor(255,255,255);
-      doc.setFontSize(9); doc.setFont('helvetica','bold');
-      doc.text(texto, x + w/2, yPos + 4.8, {align:'center'});
-      doc.setTextColor(30,30,30);
-    }
-
-    // CABEÇALHO
-    doc.setFillColor(10, 38, 71);
-    doc.rect(0, 0, 210, 28, 'F');
-    doc.setTextColor(255,255,255);
-    doc.setFontSize(16); doc.setFont('helvetica','bold');
+    doc.setFillColor(10, 38, 71); doc.rect(0, 0, 210, 28, 'F');
+    doc.setTextColor(255,255,255); doc.setFontSize(16); doc.setFont('helvetica','bold');
     doc.text('DIAGNÓSTICO DE RISCOS PSICOSSOCIAIS', margem, 12);
     doc.setFontSize(10); doc.setFont('helvetica','normal');
     doc.text('Conforme NR-01 — NeXa Psicossocial', margem, 19);
-    doc.text(`Gerado em: ${data}`, 195, 19, {align:'right'});
-    y = 36;
-
-    // IDENTIFICAÇÃO COMPLETA NR-01
-    linha('IDENTIFICAÇÃO', 11, true, [10,38,71]);
-    separador([10,38,71]);
-    linha(`Empresa: ${avalSelecionada.empresa_nome}`, 10);
-    linha(`Setor: ${avalSelecionada.setor_nome}`, 10);
-    linha(`Responsável Técnico: ${usuario.nome}${usuario.crp ? ` — CRP: ${usuario.crp}` : ''}`, 10);
-    linha(`Data de Elaboração: ${data}`, 10);
-    if (ident.funcoes) linha(`Funções/Cargos Avaliados: ${ident.funcoes}`, 10);
+    doc.text(`Gerado em: ${data}`, 195, 19, {align:'right'}); y = 36;
+    linha('IDENTIFICAÇÃO', 11, true, [10,38,71]); separador([10,38,71]);
+    linha(`Empresa: ${avalSelecionada.empresa_nome}`);
+    linha(`Setor: ${avalSelecionada.setor_nome}`);
+    linha(`Responsável Técnico: ${usuario.nome}${usuario.crp ? ` — CRP: ${usuario.crp}` : ''}`);
+    linha(`Data de Elaboração: ${data}`);
+    if (ident.funcoes) linha(`Funções/Cargos Avaliados: ${ident.funcoes}`);
     if (ident.homens || ident.mulheres) {
       const total = (parseInt(ident.homens)||0) + (parseInt(ident.mulheres)||0);
-      linha(`Trabalhadores: ${total} total (${ident.homens||0} homens / ${ident.mulheres||0} mulheres)`, 10);
+      linha(`Trabalhadores: ${total} total (${ident.homens||0} homens / ${ident.mulheres||0} mulheres)`);
     }
-    linha(`Respostas coletadas: ${avalSelecionada.total_respostas || '—'}`, 10);
-    if (ident.agravos) linha(`Possíveis Agravos à Saúde Mental: ${ident.agravos}`, 10);
-    if (ident.medidas_controle) linha(`Medidas de Controle Existentes: ${ident.medidas_controle}`, 10);
+    linha(`Respostas coletadas: ${avalSelecionada.total_respostas || '—'}`);
+    if (ident.agravos) linha(`Possíveis Agravos à Saúde Mental: ${ident.agravos}`);
+    if (ident.medidas_controle) linha(`Medidas de Controle Existentes: ${ident.medidas_controle}`);
     y += 4;
-
-    // SEMÁFORO
-    linha('MATRIZ DE RISCO — RESUMO', 11, true, [10,38,71]);
-    separador([10,38,71]);
-    const conts = [
-      ['Crítico', resultados.contagem?.Crítico||0, 153,0,0],
-      ['Alto',    resultados.contagem?.Alto||0,    220,80,80],
-      ['Médio',   resultados.contagem?.Médio||0,   202,178,0],
-      ['Baixo',   resultados.contagem?.Baixo||0,   34,139,34],
-    ];
+    const conts = [['Crítico', resultados.contagem?.Crítico||0,153,0,0],['Alto',resultados.contagem?.Alto||0,220,80,80],['Médio',resultados.contagem?.Médio||0,202,178,0],['Baixo',resultados.contagem?.Baixo||0,34,139,34]];
+    linha('MATRIZ DE RISCO — RESUMO', 11, true, [10,38,71]); separador([10,38,71]);
     const colW = 42;
     conts.forEach(([label, val, r, g, b], i) => {
       const cx = margem + i * (colW + 3);
-      doc.setFillColor(r, g, b);
-      doc.roundedRect(cx, y, colW, 16, 3, 3, 'F');
-      doc.setTextColor(255,255,255);
-      doc.setFontSize(18); doc.setFont('helvetica','bold');
+      doc.setFillColor(r, g, b); doc.roundedRect(cx, y, colW, 16, 3, 3, 'F');
+      doc.setTextColor(255,255,255); doc.setFontSize(18); doc.setFont('helvetica','bold');
       doc.text(String(val), cx + colW/2, y + 9, {align:'center'});
       doc.setFontSize(8); doc.setFont('helvetica','normal');
       doc.text(label, cx + colW/2, y + 14, {align:'center'});
     });
-    doc.setTextColor(30,30,30);
-    y += 22;
-
-    // RADAR
+    doc.setTextColor(30,30,30); y += 22;
     if (radarImgData) {
-      if (y > 200) { doc.addPage(); y = 15; }
-      linha('PANORAMA GERAL — RADAR', 11, true, [10,38,71]);
-      separador([10,38,71]);
-      doc.addImage(radarImgData, 'PNG', margem, y, largura, 80);
-      y += 86;
+      linha('PANORAMA GERAL — RADAR', 11, true, [10,38,71]); separador([10,38,71]);
+      doc.addImage(radarImgData, 'PNG', margem, y, largura, 80); y += 86;
     }
-
-    // TABELA
-    linha('CLASSIFICAÇÃO POR TÓPICO', 11, true, [10,38,71]);
-    separador([10,38,71]);
-    doc.setFillColor(240,242,245);
-    doc.rect(margem, y, largura, 7, 'F');
-    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
-    doc.text('Fator de Risco', margem+2, y+5);
-    doc.text('Gravidade', margem+100, y+5);
-    doc.text('Prob.', margem+125, y+5);
-    doc.text('Matriz', margem+145, y+5);
-    y += 9;
-
-    const corMatriz = {'Crítico':[153,0,0],'Alto':[220,80,80],'Médio':[202,178,0],'Baixo':[34,139,34]};
-    const corGrav = {'Alta':[180,0,0],'Média':[160,130,0],'Baixa':[34,139,34]};
-
-    resultados.resultados.forEach((r, idx) => {
-      if (y > 270) { doc.addPage(); y = 15; }
-      if (idx % 2 === 0) { doc.setFillColor(250,251,252); doc.rect(margem, y-1, largura, 8, 'F'); }
-      doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(30,30,30);
-      doc.text(doc.splitTextToSize(r.topico_nome, 95)[0], margem+2, y+4);
-      const cg = corGrav[r.classif_gravidade]||[100,100,100];
-      doc.setTextColor(...cg); doc.setFont('helvetica','bold');
-      doc.text(r.classif_gravidade||'—', margem+100, y+4);
-      doc.setTextColor(30,30,30); doc.setFont('helvetica','normal');
-      doc.text(r.classif_probabilidade||'—', margem+125, y+4);
-      const cm = corMatriz[r.matriz_risco]||[150,150,150];
-      retanguloColorido(r.matriz_risco||'—', ...cm, margem+140, y, 30, 6);
-      y += 9;
-    });
-    y += 4;
-
-    // PLANO DE AÇÃO
-    const riscos = resultados.resultados.filter(r=>r.matriz_risco==='Alto'||r.matriz_risco==='Crítico');
-    if (riscos.length > 0) {
-      if (y > 240) { doc.addPage(); y = 15; }
-      linha('PLANO DE AÇÃO — RISCOS PRIORITÁRIOS', 11, true, [10,38,71]);
-      separador([10,38,71]);
-      riscos.forEach(r => {
-        if (y > 260) { doc.addPage(); y = 15; }
-        const cm = corMatriz[r.matriz_risco]||[150,150,150];
-        doc.setFillColor(...cm);
-        doc.roundedRect(margem, y, 20, 6, 2, 2, 'F');
-        doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont('helvetica','bold');
-        doc.text(r.matriz_risco, margem+10, y+4, {align:'center'});
-        doc.setTextColor(30,30,30); doc.setFont('helvetica','bold'); doc.setFontSize(9);
-        doc.text(r.topico_nome, margem+23, y+4);
-        y += 8;
-        linha(`Fonte: ${r.fonte_geradora}`, 8, false, [80,80,80]);
-        r.acoes_sugeridas?.forEach(a => {
-          if (y > 270) { doc.addPage(); y = 15; }
-          linha(`• ${a}`, 8);
-        });
-        y += 3;
-      });
-    }
-
-    // RODAPÉ
-    const totalPags = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= totalPags; i++) {
-      doc.setPage(i);
-      doc.setFillColor(240,242,245);
-      doc.rect(0, 287, 210, 10, 'F');
-      doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(120,120,120);
-      doc.text('NeXa Psicossocial — Sistema DRPS — Diagnóstico de Riscos Psicossociais (NR-01)', margem, 293);
-      doc.text(`Pág. ${i}/${totalPags}`, 195, 293, {align:'right'});
-    }
-
     doc.save(`DRPS_${avalSelecionada.empresa_nome}_${avalSelecionada.setor_nome}_${data.replace(/\//g,'-')}.pdf`);
     setMsg('✅ PDF gerado com sucesso!');
   }
 
-  // ---- VIEW: RESULTADOS ----
+  // ── VIEW: AVALIAÇÃO CRIADA (com QR Code) ─────────────────────────────────
+  if (view === "avaliacao_criada" && avalCriada) {
+    const linkAval = avalCriada.link_anonimo || `${window.location.origin}/responder/${avalCriada.token_anonimo}`;
+    return (
+      <Layout titulo="Avaliação criada!" subtitulo="Compartilhe o link com os colaboradores">
+        <Card className="p-6 max-w-lg">
+          <div className="text-center mb-6">
+            <div className="text-4xl mb-2">✅</div>
+            <h2 className="text-lg font-bold text-gray-900">Avaliação criada com sucesso!</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Compartilhe o link ou QR Code abaixo com os colaboradores do setor para responderem anonimamente.
+            </p>
+          </div>
+
+          {/* QR CODE */}
+          <div className="flex items-start gap-4 mb-6">
+            <div className="flex-shrink-0">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(linkAval)}`}
+                alt="QR Code"
+                className="rounded-lg border border-gray-200"
+              />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs text-gray-500 mb-1 font-medium">Link direto:</p>
+              <div className="flex gap-2 items-center mb-3">
+                <input
+                  readOnly
+                  value={linkAval}
+                  className="text-xs border border-gray-200 rounded-lg px-2 py-2 flex-1 bg-gray-50 text-gray-700"
+                />
+                <Btn variant="secondary" onClick={() => navigator.clipboard.writeText(linkAval).then(() => setMsg('✅ Link copiado!'))}>
+                  Copiar
+                </Btn>
+              </div>
+              <p className="text-xs text-gray-400">
+                O QR Code pode ser impresso e afixado no local de trabalho para facilitar o acesso.
+              </p>
+            </div>
+          </div>
+
+          {msg && <Alert type="success">{msg}</Alert>}
+
+          <div className="flex gap-3">
+            <Btn onClick={() => { setAvalCriada(null); setView("avaliacoes"); }}>
+              Ver avaliações
+            </Btn>
+            <Btn variant="secondary" onClick={() => { setAvalCriada(null); setView("nova"); }}>
+              + Nova avaliação
+            </Btn>
+          </div>
+        </Card>
+      </Layout>
+    );
+  }
+
+  // ── VIEW: RESULTADOS ────────────────────────────────────────────────────
   if (view==="resultados" && avalSelecionada && resultados) {
     const topRiscos = [...(resultados.resultados||[])].sort((a,b)=>{
       const ord = {'Crítico':4,'Alto':3,'Médio':2,'Baixo':1};
@@ -392,20 +385,18 @@ export default function PainelPrincipal() {
       topico: r.topico_nome.replace(/^(Baixa |Baixo |Má |Maus |Excesso de |Falta de |Trabalho |Eventos )/,'').slice(0,22),
       valor: parseFloat(r.media_gravidade)||0,
     }));
-    const linkAval = `${window.location.origin.replace('8080','8080')}/responder/${avalSelecionada.token_anonimo}`;
 
     return (
     <Layout titulo="Resultados" subtitulo={`${avalSelecionada.setor_nome} · ${avalSelecionada.empresa_nome}`}
       acoes={
         <div className="flex gap-2">
-          <Btn variant="secondary" onClick={exportarCSV}>⬇ CSV</Btn>
+          <Btn variant="secondary" onClick={exportarCSV}>📥 CSV</Btn>
           <Btn variant="secondary" onClick={()=>setModalIdentificacao(true)}>📄 PDF</Btn>
           <Btn variant="secondary" onClick={()=>setView("avaliacoes")}>← Voltar</Btn>
         </div>
       }>
       {msg && <Alert type="success">{msg}</Alert>}
 
-      {/* SEMÁFORO CONTAGEM */}
       <div className="grid grid-cols-4 gap-3 mb-6">
         {[
           ['Crítico', 'bg-red-700',    'text-white',     'text-red-200'],
@@ -420,7 +411,6 @@ export default function PainelPrincipal() {
         ))}
       </div>
 
-      {/* TOP RISCOS + TOP PONTOS FORTES */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         <Card className="p-4">
           <h3 className="text-sm font-semibold text-gray-800 mb-3">🔴 Top 5 Riscos Prioritários</h3>
@@ -449,22 +439,20 @@ export default function PainelPrincipal() {
         </Card>
       </div>
 
-      {/* GRÁFICO RADAR */}
       <Card className="p-4 mb-6">
         <h3 className="text-sm font-semibold text-gray-800 mb-3">📡 Panorama Geral (Radar)</h3>
         <div id="radar-chart-container">
           <ResponsiveContainer width="100%" height={320}>
-          <RadarChart data={radarData}>
-            <PolarGrid />
-            <PolarAngleAxis dataKey="topico" tick={{fontSize:10}}/>
-            <Tooltip formatter={(v)=>[v.toFixed(2),'Gravidade média']}/>
-            <Radar name="Gravidade" dataKey="valor" stroke="#0A2647" fill="#0A2647" fillOpacity={0.25}/>
-          </RadarChart>
-        </ResponsiveContainer>
+            <RadarChart data={radarData}>
+              <PolarGrid />
+              <PolarAngleAxis dataKey="topico" tick={{fontSize:10}}/>
+              <Tooltip formatter={(v)=>[v.toFixed(2),'Gravidade média']}/>
+              <Radar name="Gravidade" dataKey="valor" stroke="#0A2647" fill="#0A2647" fillOpacity={0.25}/>
+            </RadarChart>
+          </ResponsiveContainer>
         </div>
       </Card>
 
-      {/* TABELA DETALHADA */}
       <Card className="overflow-hidden mb-4">
         <table className="w-full text-sm">
           <thead><tr className="border-b border-gray-100 bg-gray-50">
@@ -503,7 +491,6 @@ export default function PainelPrincipal() {
         </table>
       </Card>
 
-      {/* AÇÕES SUGERIDAS */}
       {resultados.resultados.filter(r=>r.matriz_risco==='Alto'||r.matriz_risco==='Crítico').length > 0 && (
         <Card className="p-4 mb-4">
           <h3 className="text-sm font-semibold text-gray-800 mb-3">⚡ Plano de Ação — Riscos Prioritários</h3>
@@ -529,35 +516,16 @@ export default function PainelPrincipal() {
         </Card>
       )}
 
-      {/* QR CODE + LINK */}
-      <Card className="p-4 mb-4">
-        <h3 className="text-sm font-semibold text-gray-800 mb-2">🔗 Link e QR Code da avaliação</h3>
-        <p className="text-xs text-gray-500 mb-3">Compartilhe o link ou QR Code com os colaboradores do setor para responderem anonimamente.</p>
-        <div className="flex items-start gap-4">
-          <div>
-            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(linkAval)}`}
-              alt="QR Code" className="rounded border border-gray-200"/>
-          </div>
-          <div className="flex-1">
-            <p className="text-xs text-gray-500 mb-1">Link direto:</p>
-            <div className="flex gap-2 items-center">
-              <input readOnly value={linkAval} className="text-xs border border-gray-200 rounded px-2 py-1.5 flex-1 bg-gray-50 text-gray-700"/>
-              <Btn variant="secondary" onClick={()=>navigator.clipboard.writeText(linkAval).then(()=>setMsg('✅ Link copiado!'))}>Copiar</Btn>
-            </div>
-          </div>
-        </div>
-      </Card>
+      {/* ✅ QR CODE REMOVIDO DAQUI — agora aparece só na tela de criação */}
 
-      {/* MODAL IDENTIFICAÇÃO DO LAUDO */}
       {modalIdentificacao && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="bg-navy p-5 rounded-t-2xl" style={{background:'#0A2647'}}>
+            <div className="p-5 rounded-t-2xl" style={{background:'#0A2647'}}>
               <h2 className="text-white font-bold text-lg">📋 Identificação do Laudo — NR-01</h2>
               <p className="text-blue-200 text-sm mt-1">Preencha os dados complementares para o laudo oficial</p>
             </div>
             <div className="p-5 space-y-4">
-              {/* Dados automáticos */}
               <div className="bg-gray-50 rounded-xl p-3 space-y-1">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Preenchido automaticamente</p>
                 <p className="text-sm text-gray-700"><span className="font-medium">Empresa:</span> {avalSelecionada?.empresa_nome}</p>
@@ -565,65 +533,48 @@ export default function PainelPrincipal() {
                 <p className="text-sm text-gray-700"><span className="font-medium">Responsável técnico:</span> {usuario.nome} {usuario.crp ? `— CRP: ${usuario.crp}` : ''}</p>
                 <p className="text-sm text-gray-700"><span className="font-medium">Data:</span> {new Date().toLocaleDateString('pt-BR')}</p>
               </div>
-
-              {/* Dados a preencher */}
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Funções/cargos avaliados neste setor *</label>
-                <input type="text"
-                  placeholder="Ex: Analista, Assistente Administrativo, Coordenador"
+                <input type="text" placeholder="Ex: Analista, Assistente Administrativo, Coordenador"
                   value={dadosIdentificacao.funcoes}
                   onChange={e=>setDadosIdentificacao({...dadosIdentificacao, funcoes:e.target.value})}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"/>
               </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Quantidade — Homens</label>
-                  <input type="number" min="0"
-                    placeholder="0"
+                  <input type="number" min="0" placeholder="0"
                     value={dadosIdentificacao.homens}
                     onChange={e=>setDadosIdentificacao({...dadosIdentificacao, homens:e.target.value})}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"/>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Quantidade — Mulheres</label>
-                  <input type="number" min="0"
-                    placeholder="0"
+                  <input type="number" min="0" placeholder="0"
                     value={dadosIdentificacao.mulheres}
                     onChange={e=>setDadosIdentificacao({...dadosIdentificacao, mulheres:e.target.value})}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"/>
                 </div>
               </div>
-
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Possíveis agravos à saúde mental</label>
-                <textarea
-                  placeholder="Ex: Burnout, transtornos de ansiedade, quadros depressivos relacionados ao trabalho..."
+                <textarea placeholder="Ex: Burnout, transtornos de ansiedade..."
                   value={dadosIdentificacao.agravos}
                   onChange={e=>setDadosIdentificacao({...dadosIdentificacao, agravos:e.target.value})}
-                  rows={2}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 resize-none"/>
+                  rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 resize-none"/>
               </div>
-
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Medidas de controle existentes</label>
-                <textarea
-                  placeholder="Ex: Programa de apoio psicológico, canal de denúncias, treinamentos de liderança..."
+                <textarea placeholder="Ex: Programa de apoio psicológico, canal de denúncias..."
                   value={dadosIdentificacao.medidas_controle}
                   onChange={e=>setDadosIdentificacao({...dadosIdentificacao, medidas_controle:e.target.value})}
-                  rows={2}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 resize-none"/>
+                  rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 resize-none"/>
               </div>
-
               <div className="flex gap-3 pt-2">
                 <button onClick={()=>setModalIdentificacao(false)}
-                  className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-3 text-sm font-medium hover:bg-gray-50">
-                  Cancelar
-                </button>
+                  className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-3 text-sm font-medium hover:bg-gray-50">Cancelar</button>
                 <button onClick={()=>{ setModalIdentificacao(false); exportarPDF(dadosIdentificacao); }}
-                  className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-sm font-bold hover:bg-blue-700">
-                  Gerar PDF completo →
-                </button>
+                  className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-sm font-bold hover:bg-blue-700">Gerar PDF completo →</button>
               </div>
             </div>
           </div>
@@ -636,9 +587,7 @@ export default function PainelPrincipal() {
           topicoNum={topicoModalAberto.topico_num}
           topicoNome={topicoModalAberto.topico_nome}
           onFechar={()=>setTopicoModalAberto(null)}
-          onAplicar={(sugestao)=>{
-            setProbabilidades({...probabilidades,[topicoModalAberto.topico_num]:sugestao});
-          }}
+          onAplicar={(sugestao)=>{ setProbabilidades({...probabilidades,[topicoModalAberto.topico_num]:sugestao}); }}
         />
       )}
       <div>
@@ -653,7 +602,6 @@ export default function PainelPrincipal() {
     );
   }
 
-
   return (
     <Layout titulo={isAdmin?"Admin":"Psicólogo"} subtitulo={usuario.crp||""}
       acoes={
@@ -664,12 +612,15 @@ export default function PainelPrincipal() {
         </div>
       }>
 
-      {msg && <Alert type="success" >{msg}</Alert>}
+      {msg && <Alert type="success">{msg}</Alert>}
       {erro && <Alert type="error">{erro}</Alert>}
 
       {/* AVALIAÇÕES */}
       {view==="avaliacoes" && (
         <div>
+          {/* ✅ DASHBOARD GERENCIAL DO ADMIN */}
+          {isAdmin && <DashboardAdmin avaliacoes={avaliacoes} onVerResultados={verResultados} />}
+
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-medium text-gray-900 text-sm">Avaliações</h2>
             <Btn onClick={()=>setView("nova")}>+ Nova avaliação</Btn>
@@ -778,7 +729,6 @@ export default function PainelPrincipal() {
           <div className="space-y-3">
             <Select label="Empresa *" required value={novaAval.empresa_id}
               onChange={e=>{ setNovaAval({...novaAval,empresa_id:e.target.value,setor_id:""}); carregarSetores(e.target.value); setAdicionandoSetor(false); }}>
-              <option value="">Selecione</option>
               <option value="">Selecione</option>
               {empresasTodas.filter(e=>e.tipo==="matriz").map(matriz=>(
                 <optgroup key={matriz.id} label={matriz.nome}>
@@ -896,9 +846,9 @@ export default function PainelPrincipal() {
                           : <Btn variant="ghost" className="text-xs text-red-600" onClick={async()=>{
                               if (!confirm(`Desabilitar "${u.nome}"? Ele não conseguirá mais fazer login.`)) return;
                               const r = await fetch(`${API}/usuarios/${u.id}/ativo`,{method:"PATCH",headers,body:JSON.stringify({ativo:false})});
-                              if (r.ok) { setMsg(`⛔ "${u.nome}" desabilitado!`); carregarTudo(); }
+                              if (r.ok) { setMsg(`⊘ "${u.nome}" desabilitado!`); carregarTudo(); }
                               else setErro("Erro ao desabilitar usuário");
-                            }}>⛔ Desabilitar</Btn>
+                            }}>⊘ Desabilitar</Btn>
                         )}
                       </div>
                     </td>
@@ -916,14 +866,7 @@ export default function PainelPrincipal() {
           <h2 className="font-medium text-gray-900 mb-4">Novo usuário</h2>
           <form onSubmit={criarUsuario} className="space-y-3">
             <Input label="Nome *" required value={novoUsr.nome} onChange={e=>setNovoUsr({...novoUsr,nome:e.target.value})}/>
-            <div>
-              <Input label="E-mail *" required type="email" value={novoUsr.email} onChange={e=>setNovoUsr({...novoUsr,email:e.target.value})}/>
-              {["gestor_matriz","gestor_filial"].includes(novoUsr.papel) && novoUsr.empresa_vinculada_id && (
-                <p className="text-xs text-gray-400 mt-1">💡 Sugerido automaticamente — edite se quiser usar outro e-mail</p>
-              )}
-            </div>
-
-            {/* SENHA COM BOTÃO MOSTRAR */}
+            <Input label="E-mail *" required type="email" value={novoUsr.email} onChange={e=>setNovoUsr({...novoUsr,email:e.target.value})}/>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Senha *</label>
               <div className="relative">
@@ -936,7 +879,7 @@ export default function PainelPrincipal() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-20"
                 />
                 <button type="button"
-                  onClick={()=>setMostrarSenha(!mostrarSenha)}
+                  onMouseDown={e=>{ e.preventDefault(); setMostrarSenha(v=>!v); }}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-blue-600 hover:underline">
                   {mostrarSenha ? "Ocultar" : "Mostrar"}
                 </button>
@@ -945,31 +888,20 @@ export default function PainelPrincipal() {
                 Deixe em branco para usar a senha padrão: <span className="font-mono">Senha@010203</span>
               </p>
             </div>
-
-            {/* CHECKBOX FORÇAR TROCA */}
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={novoUsr.forcar_troca}
                 onChange={e=>setNovoUsr({...novoUsr,forcar_troca:e.target.checked})}
                 className="w-4 h-4 text-blue-600 rounded"/>
               <span className="text-sm text-gray-700">Forçar troca de senha no primeiro acesso</span>
             </label>
-
             <Select label="Perfil *" value={novoUsr.papel} onChange={e=>setNovoUsr({...novoUsr,papel:e.target.value})}>
               <option value="psicologo">Psicólogo</option>
               <option value="gestor_matriz">Gestor Matriz</option>
               <option value="gestor_filial">Gestor Filial</option>
-              <option value="admin">Admin NeXa</option>
             </Select>
             {["gestor_matriz","gestor_filial"].includes(novoUsr.papel) && (
               <Select label="Empresa vinculada" value={novoUsr.empresa_vinculada_id}
-                onChange={e=>{
-                  const empSelecionada = empresasTodas.find(emp=>emp.id===e.target.value);
-                  setNovoUsr({
-                    ...novoUsr,
-                    empresa_vinculada_id:e.target.value,
-                    email: empSelecionada ? sugerirEmail(empSelecionada.nome) : novoUsr.email
-                  });
-                }}>
+                onChange={e=>setNovoUsr({...novoUsr,empresa_vinculada_id:e.target.value})}>
                 <option value="">Selecione</option>
                 {empresasTodas.filter(e=>e.tipo==="matriz").map(matriz=>(
                   <optgroup key={matriz.id} label={matriz.nome}>
@@ -1005,7 +937,6 @@ export default function PainelPrincipal() {
               <option value="psicologo">Psicólogo</option>
               <option value="gestor_matriz">Gestor Matriz</option>
               <option value="gestor_filial">Gestor Filial</option>
-              <option value="admin">Admin NeXa</option>
             </Select>
             {["gestor_matriz","gestor_filial"].includes(novoUsr.papel) && (
               <Select label="Empresa vinculada" value={novoUsr.empresa_vinculada_id}

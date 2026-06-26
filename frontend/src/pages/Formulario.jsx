@@ -152,7 +152,7 @@ export default function Formulario({ token }) {
     </div>
   );
 
-  // ---- ENVIADO ----
+  // ---- ENVIADO — com botão fechar ----
   if (enviado) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
@@ -164,10 +164,19 @@ export default function Formulario({ token }) {
         <p className="text-sm text-gray-400 mb-6">
           Sua contribuição é muito importante para melhorar o ambiente de trabalho.
         </p>
-        <div className="bg-green-50 border border-green-200 rounded-xl py-4 px-4">
+        <div className="bg-green-50 border border-green-200 rounded-xl py-4 px-4 mb-4">
           <p className="text-sm font-semibold text-green-700">✓ Participação concluída!</p>
-          <p className="text-xs text-green-600 mt-1">Você já pode fechar esta aba.</p>
         </div>
+        {/* ✅ BOTÃO FECHAR ABA */}
+        <button
+          onClick={() => window.close()}
+          className="w-full bg-gray-800 text-white rounded-xl py-3 text-sm font-semibold hover:bg-gray-900 transition-colors"
+        >
+          Fechar esta aba
+        </button>
+        <p className="text-xs text-gray-400 mt-2">
+          Se o botão não fechar, feche manualmente pelo navegador.
+        </p>
       </div>
     </div>
   );
@@ -213,12 +222,10 @@ export default function Formulario({ token }) {
 
   // ---- QUESTIONÁRIO ----
   const respondidas = Object.keys(respostas).length;
-  const vagasRestantes = avaliacao.total_funcionarios ? avaliacao.vagas_restantes : null;
   const pct = Math.round((respondidas/52)*100);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* HEADER STICKY */}
       <header className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center justify-between mb-2">
@@ -230,23 +237,15 @@ export default function Formulario({ token }) {
               <span className={`text-sm font-bold ${respondidas===52?'text-green-600':'text-blue-600'}`}>
                 {respondidas}/52
               </span>
-              {vagasRestantes!==null && (
-                <p className={`text-xs ${vagasRestantes>0?"text-green-600":"text-red-600"}`}>
-                  {vagasRestantes>0?`${vagasRestantes} vagas restantes`:"Limite atingido"}
-                </p>
-              )}
             </div>
           </div>
-          {/* BARRA DE PROGRESSO */}
           <div className="w-full bg-gray-100 rounded-full h-2">
-            <div className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-              style={{width:`${pct}%`}}/>
+            <div className="bg-blue-500 h-2 rounded-full transition-all duration-300" style={{width:`${pct}%`}}/>
           </div>
           {pct > 0 && <p className="text-xs text-gray-400 mt-1 text-right">{pct}% concluído</p>}
         </div>
       </header>
 
-      {/* FORMULÁRIO */}
       <form onSubmit={enviar} className="max-w-2xl mx-auto p-4 space-y-4 pb-8">
         {erroEnvio && (
           <div className="bg-red-50 border border-red-300 rounded-xl p-4 text-base text-red-800 font-medium">
@@ -263,13 +262,11 @@ export default function Formulario({ token }) {
                 naoResp ? "border-red-400 bg-red-50" :
                 respondida ? "border-green-200" : "border-gray-200"
               }`}>
-              {/* NÚMERO + PERGUNTA */}
               <p className="text-base font-bold text-gray-900 mb-4 leading-snug">
                 <span className="text-sm font-normal text-gray-400 mr-2">{i+1}.</span>
                 {p.texto}
                 {naoResp && <span className="ml-1 text-sm text-red-500 font-normal">* obrigatória</span>}
               </p>
-              {/* OPÇÕES — empilhadas no celular */}
               <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
                 {ESCALA.map(op=>(
                   <label key={op.valor}
@@ -290,7 +287,6 @@ export default function Formulario({ token }) {
           );
         })}
 
-        {/* BOTÃO ENVIAR */}
         <div className="sticky bottom-4">
           <button type="submit" disabled={loading}
             className={`w-full rounded-xl py-5 text-lg font-bold shadow-lg transition-all
