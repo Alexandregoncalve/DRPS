@@ -3,6 +3,7 @@
 // Caminho: frontend/src/pages/psicologo/Resultados.jsx
 
 import { useState, useEffect, useRef } from "react";
+import ModalConfigurarRelatorio from "./ModalConfigurarRelatorio";
 import { API } from "../../contexts/AuthContext";
 import {
   RadarChart, PolarGrid, PolarAngleAxis, Radar,
@@ -79,6 +80,7 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
   const [probLocal, setProbLocal] = useState({});
   const [salvando,  setSalvando]  = useState(false);
   const [msg,       setMsg]       = useState('');
+  const [modalConfig, setModalConfig] = useState(false);
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
@@ -87,7 +89,11 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
   async function carregar() {
     setLoading(true); setErro('');
     try {
-      const r = await fetch(`${API}/laudo/${avaliacaoId}`, { headers });
+      // Se for consolidado, usa endpoint dedicado
+      const url = avaliacaoId === 'consolidado'
+        ? `${API}/laudo/consolidado`
+        : `${API}/laudo/${avaliacaoId}`;
+      const r = await fetch(url, { headers });
       if (!r.ok) throw new Error((await r.json()).erro);
       const d = await r.json();
       setDados(d);
@@ -181,6 +187,10 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
           </p>
         </div>
         {msg && <span style={{ fontSize: 13, color: msg.startsWith('✅') ? '#86efac' : '#f87171' }}>{msg}</span>}
+        <button onClick={() => setModalConfig(true)} style={{
+          padding: '8px 16px', background: '#334155', border: '1px solid #475569',
+          borderRadius: 8, color: '#e2e8f0', fontSize: 13, cursor: 'pointer', flexShrink: 0,
+        }}>⚙️ Configurar relatório</button>
       </div>
 
       {/* Abas */}
@@ -1113,6 +1123,16 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
         )}
 
       </div>
+
+      {/* Modal Configurar Relatório */}
+      {modalConfig && (
+        <ModalConfigurarRelatorio
+          avaliacao={{ id: avaliacaoId, empresa_nome: dados?.avaliacao?.empresa_nome, setor_nome: dados?.avaliacao?.setor_nome }}
+          token={token}
+          onFechar={() => setModalConfig(false)}
+          onSalvo={() => { setModalConfig(false); carregar(); }}
+        />
+      )}
     </div>
   );
 }

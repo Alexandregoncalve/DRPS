@@ -1,5 +1,6 @@
 // routes/laudo.js
-// GET /api/laudo/:avaliacao_id — retorna todos os dados para o laudo completo NR-01
+// GET /api/laudo/consolidado — laudo consolidado de toda a rede
+// GET /api/laudo/:avaliacao_id — laudo individual
 
 const express = require('express');
 const { autenticar } = require('../middleware/autenticar');
@@ -17,7 +18,177 @@ const {
 module.exports = (pool) => {
   const router = express.Router();
 
-  // GET /api/laudo/:avaliacao_id
+  router.get('/consolidado', autenticar, async (req, res) => {
+    const { papel, empresa_vinculada_id, organizacao_id } = req.usuario;
+    try {
+      let filtro, params = [];
+      if (papel === 'gestor_matriz') {
+        filtro = `WHERE a.status IN ('processada','coletada') AND (e.id = $1 OR e.matriz_id = $1)`;
+        params = [empresa_vinculada_id];
+      } else {
+        filtro = `WHERE a.status IN ('processada','coletada') AND e.organizacao_id = $1`;
+        params = [organizacao_id];
+      }
+
+      // Busca todos os resultados de todas as avaliações processadas
+      const { rows } = await pool.query(`
+        SELECT r.*, s.nome AS setor_nome, e.nome AS empresa_nome, e.cnpj AS empresa_cnpj,
+               a.total_respostas, a.criado_em
+        FROM resultados r
+        JOIN avaliacoes a ON r.avaliacao_id = a.id
+        JOIN setores s ON a.setor_id = s.id
+        JOIN empresas e ON s.empresa_id = e.id
+        ${filtro}
+        ORDER BY r.topico_num
+      `, params);
+
+      if (!rows.length) return res.status(404).json({ erro: 'Nenhum resultado encontrado' });
+
+      // Busca responsável técnico (primeiro psicólogo das avaliações)
+      const { rows: [resp] } = await pool.query(`
+        SELECT u.nome AS psicologo_nome, u.crp AS psicologo_crp
+        FROM avaliacoes a
+        JOIN usuarios u ON u.id = a.psicologo_id
+        JOIN setores s ON a.setor_id = s.id
+        JOIN empresas e ON s.empresa_id = e.id
+        ${filtro}
+        LIMIT 1
+      `, params);
+
+      const empresasNomes = [...new Set(rows.map(r => r.empresa_nome))];
+      const totalRespostas = rows.reduce((acc, r) => {
+        if (!acc.seen) acc.seen = new Set();
+        if (!acc.seen.has(r.avaliacao_id)) { acc.seen.add(r.avaliacao_id); acc.total += (r.total_respostas || 0); }
+        return acc;
+      }, { total: 0, seen: new Set() }).total;
+
+      // Calcula média real por tópico entre todas as avaliações
+      const porTopico = {};
+      rows.forEach(r => {
+        if (!porTopico[r.topico_num]) {
+          porTopico[r.topico_num] = {
+            topico_num: r.topico_num, topico_nome: r.topico_nome,
+            fonte_geradora: r.fonte_geradora,
+            soma: 0, count: 0,
+            contagem_risco: { Crítico:0, Alto:0, Médio:0, Baixo:0 },
+            setores_em_risco: [], media_probabilidade: r.media_probabilidade,
+          };
+        }
+        const t = porTopico[r.topico_num];
+        t.soma += parseFloat(r.media_gravidade) || 0;
+        t.count++;
+        if (t.contagem_risco[r.matriz_risco] !== undefined) t.contagem_risco[r.matriz_risco]++;
+        if (r.matriz_risco === 'Alto' || r.matriz_risco === 'Crítico') {
+          t.setores_em_risco.push(`${r.empresa_nome} — ${r.setor_nome}`);
+        }
+      });
+
+      // Monta resultados — usa pior caso entre setores para cada tópico
+      // E conta ocorrências somadas (igual ao painel)
+      const resultados = Object.values(porTopico).map(t => {
+        const media = t.count > 0 ? t.soma / t.count : 0;
+        // Usa pior zona que ocorreu em qualquer setor
+        const ordemZ = { Crítico:4, Alto:3, Médio:2, Baixo:1 };
+        const piorZona = Object.entries(t.contagem_risco)
+          .filter(([,v]) => v > 0)
+          .sort((a,b) => (ordemZ[b[0]]||0) - (ordemZ[a[0]]||0))[0]?.[0] || 'Baixo';
+        let classif;
+        if (piorZona === 'Crítico' || piorZona === 'Alto') classif = 'Alta';
+        else if (piorZona === 'Médio') classif = 'Média';
+        else classif = 'Baixa';
+        return {
+          topico_num: t.topico_num, topico_nome: t.topico_nome,
+          fonte_geradora: t.fonte_geradora,
+          media_gravidade: parseFloat(media.toFixed(2)),
+          classif_gravidade: classif,
+          media_probabilidade: t.media_probabilidade || 2,
+          classif_probabilidade: 'Média',
+          matriz_risco: piorZona,
+          setores_em_risco: [...new Set(t.setores_em_risco)],
+          acoes_sugeridas: [],
+          contagem_por_setor: t.contagem_risco,
+        };
+      }).sort((a, b) => a.topico_num - b.topico_num);
+
+      // Contagem consolidada = soma de ocorrências brutas (igual ao semáforo do painel)
+      const contagem = { Crítico:0, Alto:0, Médio:0, Baixo:0 };
+      rows.forEach(r => { if (contagem[r.matriz_risco] !== undefined) contagem[r.matriz_risco]++; });
+
+      // Monta top5, radar, inventários — igual ao laudo individual
+      const ordemRisco = { Crítico:4, Alto:3, Médio:2, Baixo:1 };
+      const top5 = [...resultados].sort((a,b) => (ordemRisco[b.matriz_risco]||0)-(ordemRisco[a.matriz_risco]||0)).slice(0,5);
+
+      const radarData = resultados.map(r => ({
+        topico: r.topico_nome.replace(/^(Baixa |Baixo |Má |Maus |Excesso de |Falta de |Trabalho |Eventos )/i,'').slice(0,24),
+        topico_completo: r.topico_nome,
+        valor: parseFloat(r.media_gravidade) || 0,
+        zona: r.matriz_risco,
+      }));
+
+      const inventarioMTE = FATORES_MTE.map(fator => {
+        const assoc = resultados.filter(r => fator.topicos_copsoq.includes(r.topico_num));
+        const temRisco = assoc.some(r => r.matriz_risco === 'Alto' || r.matriz_risco === 'Crítico');
+        const temAtencao = assoc.some(r => r.matriz_risco === 'Médio');
+        return {
+          ...fator, status: temRisco ? 'Indícios' : temAtencao ? 'Monitoramento' : 'Não identificado',
+          dimensoes_associadas: assoc.map(r => ({ nome: r.topico_nome, score: r.media_gravidade, classif: r.classif_gravidade, matriz: r.matriz_risco })),
+        };
+      });
+
+      const inventarioFontes = resultados
+        .filter(r => r.matriz_risco === 'Alto' || r.matriz_risco === 'Crítico' || r.matriz_risco === 'Médio')
+        .map(r => ({
+          topico_num: r.topico_num, topico_nome: r.topico_nome, matriz_risco: r.matriz_risco, score: r.media_gravidade,
+          ...(INVENTARIO_FONTES[r.topico_num] || { fontes_geradoras:[], circunstancias_exposicao:[], possiveis_agravos:[] }),
+        }));
+
+      const matrizAIHA = resultados
+        .filter(r => r.matriz_risco === 'Alto' || r.matriz_risco === 'Crítico' || r.matriz_risco === 'Médio')
+        .map(r => {
+          const sev = copsoqParaSeveridade(parseFloat(r.media_gravidade));
+          const prob = copsoqParaProbabilidadeAIHA(r.media_probabilidade);
+          const pxs = sev * prob;
+          const nivel = calcularNivelAIHA(pxs);
+          return {
+            topico_num: r.topico_num, fator_pgr: INVENTARIO_FONTES[r.topico_num]?.fator_pgr || r.topico_nome,
+            score: parseFloat(r.media_gravidade), severidade: sev, severidade_label: LABELS_SEVERIDADE[sev],
+            probabilidade: prob, probabilidade_label: LABELS_PROBABILIDADE[prob], pxs,
+            nivel_risco: nivel.nivel, cor: nivel.cor,
+          };
+        }).sort((a,b) => b.pxs - a.pxs);
+
+      const totalRisco = contagem.Alto + contagem.Crítico;
+      const periodoRecomendado = totalRisco > 0 ? 6 : 12;
+      const dataProxima = new Date();
+      dataProxima.setMonth(dataProxima.getMonth() + periodoRecomendado);
+
+      res.json({
+        avaliacao: {
+          id: 'consolidado', empresa_nome: empresasNomes.join(' · '),
+          empresa_cnpj: null, setor_nome: `Consolidado — ${empresasNomes.length} empresa(s)`,
+          total_respostas: totalRespostas, taxa_adesao: null,
+          criado_em: new Date().toISOString(),
+          psicologo_nome: resp?.psicologo_nome || '', psicologo_crp: resp?.psicologo_crp || '',
+        },
+        config: {},
+        resultados, contagem, top5, radarData,
+        inventarioMTE, inventarioFontes, matrizAIHA,
+        controles: [], glossario: GLOSSARIO,
+        periodicidade: {
+          meses: periodoRecomendado,
+          proxima_avaliacao: dataProxima.toISOString().slice(0,10),
+          justificativa: totalRisco > 0
+            ? `${totalRisco} dimensão(ões) em risco requerem reavaliação em ${periodoRecomendado} meses.`
+            : 'Reavaliação anual recomendada conforme NR-01.',
+        },
+      });
+    } catch (err) {
+      console.error('[laudo consolidado]', err);
+      res.status(500).json({ erro: 'Erro interno ao gerar laudo consolidado' });
+    }
+  });
+
+  // GET /api/laudo/:avaliacao_id — laudo individual
   router.get('/:avaliacao_id', autenticar, async (req, res) => {
     try {
       const { avaliacao_id } = req.params;

@@ -265,50 +265,72 @@ module.exports = (pool) => {
 
       if (!rows.length) return res.status(404).json({ erro: 'Nenhum resultado encontrado para esta empresa' });
 
-      // Ordena por risco (pior primeiro) para pegar o pior resultado por tópico
       const ordemRisco = { 'Crítico': 4, 'Alto': 3, 'Médio': 2, 'Baixo': 1, 'Pendente': 0 };
-      const ordemGrav  = { 'Alta': 3, 'Média': 2, 'Baixa': 1 };
-      const ordemProb  = { 'Alta': 3, 'Média': 2, 'Baixa': 1 };
 
+      // Agrupa por tópico — calcula média real entre setores E registra pior caso
       const porTopico = {};
       rows.forEach(r => {
-        const atual = porTopico[r.topico_num];
-        const novoRisco = ordemRisco[r.matriz_risco] || 0;
-        // Guarda o pior resultado deste tópico entre todos os setores
-        if (!atual || novoRisco > (ordemRisco[atual.matriz_risco] || 0)) {
-          porTopico[r.topico_num] = { ...r, setores_alto: [], setores_todos: [] };
+        if (!porTopico[r.topico_num]) {
+          porTopico[r.topico_num] = {
+            ...r,
+            setores_alto: [],
+            setores_todos: [],
+            contagem_risco: { Crítico:0, Alto:0, Médio:0, Baixo:0 },
+            soma_gravidade: 0,
+            count: 0,
+            pior_risco: r.matriz_risco,
+          };
         }
-        if (!porTopico[r.topico_num].setores_todos) porTopico[r.topico_num].setores_todos = [];
-        porTopico[r.topico_num].setores_todos.push(r.setor_nome);
-        if (r.matriz_risco === 'Alto' || r.matriz_risco === 'Crítico') {
-          if (!porTopico[r.topico_num].setores_alto) porTopico[r.topico_num].setores_alto = [];
-          porTopico[r.topico_num].setores_alto.push(r.setor_nome);
-        }
+        const t = porTopico[r.topico_num];
+        t.setores_todos.push(r.setor_nome);
+        t.soma_gravidade += parseFloat(r.media_gravidade) || 0;
+        t.count++;
+        if (t.contagem_risco[r.matriz_risco] !== undefined) t.contagem_risco[r.matriz_risco]++;
+        if (r.matriz_risco === 'Alto' || r.matriz_risco === 'Crítico') t.setores_alto.push(r.setor_nome);
+        // Guarda pior caso para referência
+        if ((ordemRisco[r.matriz_risco]||0) > (ordemRisco[t.pior_risco]||0)) t.pior_risco = r.matriz_risco;
       });
 
-      // Monta resultado final com info de quantos setores afetados
-      const resultados = Object.values(porTopico).map(t => ({
-        topico_num: t.topico_num,
-        topico_nome: t.topico_nome,
-        fonte_geradora: t.fonte_geradora,
-        empresa_nome: t.empresa_nome,
-        media_gravidade: parseFloat(t.media_gravidade) || null,
-        classif_gravidade: t.classif_gravidade,
-        media_probabilidade: parseFloat(t.media_probabilidade) || null,
-        classif_probabilidade: t.classif_probabilidade,
-        matriz_risco: t.matriz_risco,
-        setores_incluidos: [...new Set(t.setores_todos || [])],
-        setores_em_risco: [...new Set(t.setores_alto || [])],
-        acoes_sugeridas: [],
-      }));
+      // Monta resultado: média real entre setores + info de distribuição
+      const resultados = Object.values(porTopico).map(t => {
+        const mediaReal = t.count > 0 ? t.soma_gravidade / t.count : 0;
+        // Classifica pela média real (não pelo pior caso)
+        let classifReal, matrizReal;
+        if      (mediaReal < 2.00) { classifReal = 'Alta';  matrizReal = t.contagem_risco.Crítico > 0 ? 'Crítico' : 'Alto'; }
+        else if (mediaReal < 2.33) { classifReal = 'Alta';  matrizReal = 'Alto'; }
+        else if (mediaReal < 3.66) { classifReal = 'Média'; matrizReal = 'Médio'; }
+        else                       { classifReal = 'Baixa'; matrizReal = 'Baixo'; }
 
+        return {
+          topico_num: t.topico_num,
+          topico_nome: t.topico_nome,
+          fonte_geradora: t.fonte_geradora,
+          empresa_nome: t.empresa_nome,
+          media_gravidade: parseFloat(mediaReal.toFixed(2)),
+          classif_gravidade: classifReal,
+          media_probabilidade: t.media_probabilidade,
+          classif_probabilidade: t.classif_probabilidade,
+          matriz_risco: matrizReal,
+          pior_caso: t.pior_risco,
+          contagem_por_setor: t.contagem_risco,
+          setores_incluidos: [...new Set(t.setores_todos)],
+          setores_em_risco: [...new Set(t.setores_alto)],
+          acoes_sugeridas: [],
+        };
+      });
+
+      // Contagem baseada na média real entre setores
       const contagem = { Baixo:0, Médio:0, Alto:0, Crítico:0 };
       resultados.forEach(r => { if (contagem[r.matriz_risco]!==undefined) contagem[r.matriz_risco]++; });
+
+      // Totais de ocorrências por setor (soma bruta de todos os setores)
+      const totais_ocorrencias = { Baixo:0, Médio:0, Alto:0, Crítico:0 };
+      rows.forEach(r => { if (totais_ocorrencias[r.matriz_risco]!==undefined) totais_ocorrencias[r.matriz_risco]++; });
 
       res.json({
         empresa_nome: rows[0].empresa_nome,
         total_setores: new Set(rows.map(r=>r.setor_nome)).size,
-        resultados, contagem
+        resultados, contagem, totais_ocorrencias
       });
     } catch(e) { console.error(e); res.status(500).json({ erro: e.message }); }
   });
@@ -343,40 +365,63 @@ module.exports = (pool) => {
 
       const ordemRisco = { 'Crítico': 4, 'Alto': 3, 'Médio': 2, 'Baixo': 1, 'Pendente': 0 };
 
+      // Calcula MÉDIA REAL entre todos os setores (igual ao laudo-empresa)
       const porTopico = {};
       rows.forEach(r => {
-        const atual = porTopico[r.topico_num];
-        const novoRisco = ordemRisco[r.matriz_risco] || 0;
-        if (!atual || novoRisco > (ordemRisco[atual.matriz_risco] || 0)) {
-          porTopico[r.topico_num] = { ...r, setores_em_risco: [], empresas_incluidas: [] };
+        if (!porTopico[r.topico_num]) {
+          porTopico[r.topico_num] = {
+            ...r,
+            soma_gravidade: 0,
+            count: 0,
+            contagem_risco: { Crítico:0, Alto:0, Médio:0, Baixo:0 },
+            setores_em_risco: [],
+            empresas_incluidas: [],
+            pior_risco: r.matriz_risco,
+          };
         }
-        if (!porTopico[r.topico_num].empresas_incluidas) porTopico[r.topico_num].empresas_incluidas = [];
-        porTopico[r.topico_num].empresas_incluidas.push(`${r.empresa_nome} — ${r.setor_nome}`);
-        if (r.matriz_risco === 'Alto' || r.matriz_risco === 'Crítico') {
-          if (!porTopico[r.topico_num].setores_em_risco) porTopico[r.topico_num].setores_em_risco = [];
-          porTopico[r.topico_num].setores_em_risco.push(`${r.empresa_nome} — ${r.setor_nome}`);
-        }
+        const t = porTopico[r.topico_num];
+        t.soma_gravidade += parseFloat(r.media_gravidade) || 0;
+        t.count++;
+        t.empresas_incluidas.push(`${r.empresa_nome} — ${r.setor_nome}`);
+        if (t.contagem_risco[r.matriz_risco] !== undefined) t.contagem_risco[r.matriz_risco]++;
+        if (r.matriz_risco === 'Alto' || r.matriz_risco === 'Crítico') t.setores_em_risco.push(`${r.empresa_nome} — ${r.setor_nome}`);
+        if ((ordemRisco[r.matriz_risco]||0) > (ordemRisco[t.pior_risco]||0)) t.pior_risco = r.matriz_risco;
       });
 
-      const resultados = Object.values(porTopico).map(t => ({
-        topico_num: t.topico_num,
-        topico_nome: t.topico_nome,
-        fonte_geradora: t.fonte_geradora,
-        media_gravidade: parseFloat(t.media_gravidade) || null,
-        classif_gravidade: t.classif_gravidade,
-        media_probabilidade: parseFloat(t.media_probabilidade) || null,
-        classif_probabilidade: t.classif_probabilidade,
-        matriz_risco: t.matriz_risco,
-        empresas_incluidas: [...new Set(t.empresas_incluidas || [])],
-        setores_em_risco: [...new Set(t.setores_em_risco || [])],
-        acoes_sugeridas: [],
-      }));
+      const resultados = Object.values(porTopico).map(t => {
+        const mediaReal = t.count > 0 ? t.soma_gravidade / t.count : 0;
+        let classifReal, matrizReal;
+        if      (mediaReal < 2.00) { classifReal = 'Alta';  matrizReal = t.contagem_risco.Crítico > 0 ? 'Crítico' : 'Alto'; }
+        else if (mediaReal < 2.33) { classifReal = 'Alta';  matrizReal = 'Alto'; }
+        else if (mediaReal < 3.66) { classifReal = 'Média'; matrizReal = 'Médio'; }
+        else                       { classifReal = 'Baixa'; matrizReal = 'Baixo'; }
+        return {
+          topico_num: t.topico_num,
+          topico_nome: t.topico_nome,
+          fonte_geradora: t.fonte_geradora,
+          media_gravidade: parseFloat(mediaReal.toFixed(2)),
+          classif_gravidade: classifReal,
+          media_probabilidade: t.media_probabilidade,
+          classif_probabilidade: t.classif_probabilidade,
+          matriz_risco: matrizReal,
+          pior_caso: t.pior_risco,
+          contagem_por_setor: t.contagem_risco,
+          empresas_incluidas: [...new Set(t.empresas_incluidas)],
+          setores_em_risco: [...new Set(t.setores_em_risco)],
+          acoes_sugeridas: [],
+        };
+      });
 
+      // Contagem pela MÉDIA REAL — deve bater com o semáforo do painel
       const contagem = { Baixo:0, Médio:0, Alto:0, Crítico:0 };
       resultados.forEach(r => { if (contagem[r.matriz_risco]!==undefined) contagem[r.matriz_risco]++; });
 
+      // Totais brutos (soma de todas as ocorrências por setor)
+      const totais_ocorrencias = { Baixo:0, Médio:0, Alto:0, Crítico:0 };
+      rows.forEach(r => { if (totais_ocorrencias[r.matriz_risco]!==undefined) totais_ocorrencias[r.matriz_risco]++; });
+
       const empresas = [...new Set(rows.map(r=>r.empresa_nome))];
-      res.json({ empresas, total_empresas: empresas.length, resultados, contagem });
+      res.json({ empresas, total_empresas: empresas.length, resultados, contagem, totais_ocorrencias });
     } catch(e) { console.error(e); res.status(500).json({ erro: e.message }); }
   });
 

@@ -13,70 +13,169 @@ const SETORES_COMUNS = [
   "Qualidade", "Compras", "Manutenção",
 ];
 
-// ── Dashboard Gerencial do Admin ─────────────────────────────────────────────
-function DashboardAdmin({ avaliacoes, onVerResultados }) {
+// ── Dashboard Gerencial do Admin — Novo Layout ───────────────────────────────
+function DashboardAdmin({ avaliacoes, onVerResultados, onNovaAvaliacao, onVerConsolidado, headers }) {
+  const [carregandoLaudo, setCarregandoLaudo] = useState(false);
+
   const processadas = avaliacoes.filter(a => a.status === 'processada');
   const contagem = { Crítico: 0, Alto: 0, Médio: 0, Baixo: 0 };
   processadas.forEach(a => {
-    if (a.contagem) {
-      Object.keys(contagem).forEach(k => { contagem[k] += (a.contagem[k] || 0); });
-    }
+    if (a.contagem) Object.keys(contagem).forEach(k => { contagem[k] += (a.contagem[k] || 0); });
   });
 
-  if (processadas.length === 0) return null;
+  const porEmpresa = {};
+  processadas.forEach(a => {
+    if (!porEmpresa[a.empresa_nome]) porEmpresa[a.empresa_nome] = { nome: a.empresa_nome, avaliacoes: [], contagem: { Crítico:0, Alto:0, Médio:0, Baixo:0 } };
+    porEmpresa[a.empresa_nome].avaliacoes.push(a);
+    if (a.contagem) Object.keys(porEmpresa[a.empresa_nome].contagem).forEach(k => { porEmpresa[a.empresa_nome].contagem[k] += (a.contagem[k] || 0); });
+  });
+  const empresas = Object.values(porEmpresa).sort((a,b) =>
+    ((b.contagem.Crítico*4 + b.contagem.Alto*3)) - ((a.contagem.Crítico*4 + a.contagem.Alto*3))
+  );
+
+  const COR_BADGE = { Crítico: 'bg-red-100 text-red-700', Alto: 'bg-orange-100 text-orange-700', Médio: 'bg-yellow-100 text-yellow-700', Baixo: 'bg-green-100 text-green-700' };
+  const COR_SEM = [
+    ['Crítico','#7f1d1d','#fca5a5'],
+    ['Alto',   '#7c2d12','#fdba74'],
+    ['Médio',  '#713f12','#fde68a'],
+    ['Baixo',  '#14532d','#86efac'],
+  ];
+
+  if (avaliacoes.length === 0) return null;
 
   return (
-    <Card className="p-4 mb-6 border-l-4 border-l-blue-600">
-      <h3 className="text-sm font-bold text-gray-900 mb-1">📊 Painel Gerencial — Visão Consolidada</h3>
-      <p className="text-xs text-gray-500 mb-4">
-        {processadas.length} avaliação(ões) processada(s) em {new Set(avaliacoes.map(a => a.empresa_nome)).size} empresa(s)
-      </p>
-      <div className="grid grid-cols-4 gap-3 mb-4">
-        {[
-          ['Crítico', 'bg-red-700',    'text-white',    'text-red-200'],
-          ['Alto',    'bg-red-400',    'text-white',    'text-red-50'],
-          ['Médio',   'bg-yellow-300', 'text-gray-900', 'text-yellow-800'],
-          ['Baixo',   'bg-green-500',  'text-white',    'text-green-50'],
-        ].map(([k, bg, tc, lc]) => (
-          <div key={k} className={`rounded-xl p-3 text-center ${bg}`}>
-            <p className={`text-2xl font-bold ${tc}`}>{contagem[k]}</p>
-            <p className={`text-xs font-semibold mt-1 ${lc}`}>{k}</p>
+    <div className="mb-6">
+
+      {/* 1. VISÃO CONSOLIDADA — topo, mais importante */}
+      {processadas.length > 0 && (
+        <Card className="p-4 mb-3 border-l-4 border-l-blue-500">
+          <div className="mb-3">
+            <p className="text-sm font-semibold text-gray-900">Visão consolidada da rede</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {processadas.length} avaliação(ões) processada(s) em {empresas.length} empresa(s)
+            </p>
           </div>
-        ))}
-      </div>
-      <div className="space-y-2">
-        {processadas
-          .sort((a, b) => {
-            const ord = { Crítico: 4, Alto: 3, Médio: 2, Baixo: 1 };
-            const scoreA = (a.contagem?.Crítico || 0) * 4 + (a.contagem?.Alto || 0) * 3;
-            const scoreB = (b.contagem?.Crítico || 0) * 4 + (b.contagem?.Alto || 0) * 3;
-            return scoreB - scoreA;
-          })
-          .map(a => (
-            <div key={a.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-              <div>
-                <p className="text-xs font-medium text-gray-800">{a.empresa_nome} · {a.setor_nome}</p>
-                <div className="flex gap-2 mt-1">
-                  {['Crítico', 'Alto', 'Médio', 'Baixo'].map(k => (
-                    a.contagem?.[k] > 0 && (
-                      <span key={k} className={`text-xs px-1.5 py-0.5 rounded-full font-medium
-                        ${k === 'Crítico' ? 'bg-red-100 text-red-700' :
-                          k === 'Alto'    ? 'bg-orange-100 text-orange-700' :
-                          k === 'Médio'   ? 'bg-yellow-100 text-yellow-700' :
-                                           'bg-green-100 text-green-700'}`}>
-                        {a.contagem[k]} {k}
-                      </span>
-                    )
-                  ))}
-                </div>
+          <div className="flex gap-2">
+            {COR_SEM.map(([k, bg, tc]) => (
+              <div key={k} style={{ background: bg, flex: 1 }} className="rounded-xl py-3 text-center">
+                <p style={{ color: tc }} className="text-2xl font-bold">{contagem[k]}</p>
+                <p style={{ color: tc }} className="text-xs mt-1 opacity-90">{k}</p>
               </div>
-              <Btn variant="ghost" className="text-xs" onClick={() => onVerResultados(a)}>
-                Ver →
-              </Btn>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* 2. DUAS COLUNAS — Por empresa + Avaliações individuais */}
+      <div className="grid grid-cols-2 gap-3">
+
+        {/* COLUNA ESQUERDA — Por empresa/filial */}
+        <Card className="p-4">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Por empresa</p>
+          {empresas.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-4">Nenhuma avaliação processada</p>
+          ) : (
+            <div className="space-y-2">
+
+              {/* LINHA 1: CONSOLIDADO — soma de tudo */}
+              <div className="flex items-center justify-between p-2 rounded-lg border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors">
+                <div className="flex-1 min-w-0 mr-2">
+                  <p className="text-xs font-bold text-blue-800">Consolidado</p>
+                  <p className="text-xs text-blue-500 mt-0.5">{processadas.length} setor(es) · todas as empresas</p>
+                  <div className="flex gap-1 mt-1 flex-wrap">
+                    {['Crítico','Alto','Médio','Baixo'].map(k => contagem[k] > 0 && (
+                      <span key={k} className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${COR_BADGE[k]}`}>
+                        {contagem[k]} {k}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={async () => {
+                    setCarregandoLaudo(true);
+                    try {
+                      const r = await fetch(`${API}/avaliacoes/consolidado/laudo-rede`, { headers });
+                      const d = await r.json();
+                      if (!d.erro) onVerConsolidado(d);
+                    } catch(e) {}
+                    setCarregandoLaudo(false);
+                  }}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-bold flex-shrink-0">
+                  {carregandoLaudo ? '...' : 'Ver →'}
+                </button>
+              </div>
+
+              {/* LINHAS: cada empresa/filial */}
+              {empresas.map(emp => (
+                <div key={emp.nome} className="flex items-center justify-between p-2 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                  <div className="flex-1 min-w-0 mr-2">
+                    <p className="text-xs font-semibold text-gray-800 truncate">{emp.nome}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{emp.avaliacoes.length} setor(es)</p>
+                    <div className="flex gap-1 mt-1 flex-wrap">
+                      {['Crítico','Alto','Médio','Baixo'].map(k => emp.contagem[k] > 0 && (
+                        <span key={k} className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${COR_BADGE[k]}`}>
+                          {emp.contagem[k]} {k}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <button onClick={() => onVerResultados(emp.avaliacoes[0])}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium flex-shrink-0">
+                    Ver →
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+        </Card>
+
+        {/* COLUNA DIREITA — Avaliações individuais */}
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Avaliações individuais</p>
+            <Btn onClick={onNovaAvaliacao} className="text-xs py-1 px-2">+ Nova</Btn>
+          </div>
+          {avaliacoes.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-4">Nenhuma avaliação</p>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {avaliacoes.map(a => (
+                <div key={a.id} className="py-2.5">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0 mr-2">
+                      <p className="text-xs font-semibold text-gray-800 truncate">{a.empresa_nome} · {a.setor_nome}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {new Date(a.criado_em).toLocaleDateString('pt-BR')}
+                        {a.data_fim && <span className={`ml-1 ${new Date(a.data_fim) < new Date() ? 'text-red-500' : 'text-amber-500'}`}>· Limite {new Date(a.data_fim).toLocaleDateString('pt-BR')}</span>}
+                      </p>
+                      <div className="flex gap-1 mt-1 flex-wrap">
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${a.status==='processada'?'bg-green-100 text-green-700':'bg-blue-100 text-blue-700'}`}>
+                          {a.status==='processada'?'Processada':'Em coleta'}
+                        </span>
+                        {a.status==='processada' && ['Crítico','Alto','Médio','Baixo'].map(k => a.contagem?.[k] > 0 && (
+                          <span key={k} className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${COR_BADGE[k]}`}>
+                            {a.contagem[k]} {k}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="mt-1.5">
+                        <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-green-500 rounded-full" style={{ width: `${Math.min(100, Math.round(((a.respostas_coletadas||0)/(a.setor_total_funcionarios||1))*100))}%` }} />
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">{a.respostas_coletadas||0} responderam</p>
+                      </div>
+                    </div>
+                    <button onClick={() => onVerResultados(a)}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium flex-shrink-0 mt-0.5">
+                      Ver →
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -90,8 +189,9 @@ export default function PainelPrincipal() {
   const [avaliacoes, setAvaliacoes] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [avalSelecionada, setAvalSelecionada] = useState(null);
-  const [avalCriada, setAvalCriada] = useState(null); // ← nova avaliação criada (para mostrar QR Code)
+  const [avalCriada, setAvalCriada] = useState(null);
   const [resultados, setResultados] = useState(null);
+  const [laudoConsolidado, setLaudoConsolidado] = useState(null);
   const [probabilidades, setProbabilidades] = useState({});
   const [msg, setMsg] = useState(""); const [erro, setErro] = useState("");
   const [processando, setProcessando] = useState(false);
@@ -367,6 +467,17 @@ export default function PainelPrincipal() {
     );
   }
 
+  // ── VIEW: CONSOLIDADO — mesmo componente, tela cheia ─────────────────────
+  if (view === "consolidado") {
+    return (
+      <Resultados
+        avaliacaoId="consolidado"
+        token={token}
+        onVoltar={() => setView("avaliacoes")}
+      />
+    );
+  }
+
   return (
     <Layout titulo={isAdmin?"Admin":"Psicólogo"} subtitulo={usuario.crp||""}
       acoes={
@@ -383,38 +494,50 @@ export default function PainelPrincipal() {
       {/* AVALIAÇÕES */}
       {view==="avaliacoes" && (
         <div>
-          {/* ✅ DASHBOARD GERENCIAL DO ADMIN */}
-          {isAdmin && <DashboardAdmin avaliacoes={avaliacoes} onVerResultados={verResultados} />}
+          {isAdmin && (
+            <DashboardAdmin
+              avaliacoes={avaliacoes}
+              onVerResultados={verResultados}
+              onNovaAvaliacao={() => setView("nova")}
+              onVerConsolidado={(d) => { setLaudoConsolidado(d); setView('consolidado'); }}
+              headers={headers}
+            />
+          )}
 
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-medium text-gray-900 text-sm">Avaliações</h2>
-            <Btn onClick={()=>setView("nova")}>+ Nova avaliação</Btn>
-          </div>
-          <div className="space-y-3">
-            {avaliacoes.length===0 ? <Card className="p-6 text-sm text-gray-400">Nenhuma avaliação.</Card>
-              : avaliacoes.map(a=>(
-                <Card key={a.id} className="p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{a.empresa_nome} · {a.setor_nome}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        📅 Aberta em: {new Date(a.criado_em).toLocaleDateString("pt-BR")}
-                        {a.data_fim && (
-                          <span className={`ml-2 font-medium ${new Date(a.data_fim) < new Date() ? 'text-red-500' : 'text-amber-600'}`}>
-                            · ⏱ Limite: {new Date(a.data_fim).toLocaleDateString("pt-BR")}
-                            {new Date(a.data_fim) < new Date() && ' (encerrada)'}
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5"><BadgeRisco valor={a.status}/></p>
-                    </div>
-                    <Btn variant="ghost" onClick={()=>verResultados(a)} className="text-xs">Ver resultados</Btn>
-                  </div>
-                  <BarraProgresso coletadas={parseInt(a.respostas_coletadas)||0} total={parseInt(a.setor_total_funcionarios)||0}/>
-                </Card>
-              ))
-            }
-          </div>
+          {/* Lista simples para psicólogo (não admin) */}
+          {!isAdmin && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-medium text-gray-900 text-sm">Avaliações</h2>
+                <Btn onClick={()=>setView("nova")}>+ Nova avaliação</Btn>
+              </div>
+              <div className="space-y-3">
+                {avaliacoes.length===0 ? <Card className="p-6 text-sm text-gray-400">Nenhuma avaliação.</Card>
+                  : avaliacoes.map(a=>(
+                    <Card key={a.id} className="p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{a.empresa_nome} · {a.setor_nome}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            📅 Aberta em: {new Date(a.criado_em).toLocaleDateString("pt-BR")}
+                            {a.data_fim && (
+                              <span className={`ml-2 font-medium ${new Date(a.data_fim) < new Date() ? 'text-red-500' : 'text-amber-600'}`}>
+                                · ⏱ Limite: {new Date(a.data_fim).toLocaleDateString("pt-BR")}
+                                {new Date(a.data_fim) < new Date() && ' (encerrada)'}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5"><BadgeRisco valor={a.status}/></p>
+                        </div>
+                        <Btn variant="ghost" onClick={()=>verResultados(a)} className="text-xs">Ver resultados</Btn>
+                      </div>
+                      <BarraProgresso coletadas={parseInt(a.respostas_coletadas)||0} total={parseInt(a.setor_total_funcionarios)||0}/>
+                    </Card>
+                  ))
+                }
+              </div>
+            </div>
+          )}
         </div>
       )}
 
