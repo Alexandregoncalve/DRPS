@@ -30,14 +30,28 @@ module.exports = (pool) => {
   router.get('/', autenticar, async (req, res) => {
     const { papel, id: userId, empresa_vinculada_id, organizacao_id } = req.usuario;
     try {
+      // LEFT JOIN com subquery que agrega contagem de riscos da tabela resultados
       const base = `
         SELECT a.*, s.nome as setor_nome, s.total_funcionarios as setor_total_funcionarios,
           e.nome as empresa_nome, e.tipo as empresa_tipo,
           a.total_respostas as respostas_coletadas,
-          GREATEST(0, COALESCE(s.total_funcionarios,0) - COALESCE(a.total_respostas,0)) as vagas_restantes
+          GREATEST(0, COALESCE(s.total_funcionarios,0) - COALESCE(a.total_respostas,0)) as vagas_restantes,
+          COALESCE(rc.critico, 0) as cnt_critico,
+          COALESCE(rc.alto,    0) as cnt_alto,
+          COALESCE(rc.medio,   0) as cnt_medio,
+          COALESCE(rc.baixo,   0) as cnt_baixo
         FROM avaliacoes a
         JOIN setores s ON a.setor_id = s.id
-        JOIN empresas e ON s.empresa_id = e.id`;
+        JOIN empresas e ON s.empresa_id = e.id
+        LEFT JOIN (
+          SELECT avaliacao_id,
+            COUNT(*) FILTER (WHERE matriz_risco = 'Crítico') as critico,
+            COUNT(*) FILTER (WHERE matriz_risco = 'Alto')    as alto,
+            COUNT(*) FILTER (WHERE matriz_risco = 'Médio')   as medio,
+            COUNT(*) FILTER (WHERE matriz_risco = 'Baixo')   as baixo
+          FROM resultados
+          GROUP BY avaliacao_id
+        ) rc ON rc.avaliacao_id = a.id`;
 
       let query, params = [];
       if (papel === 'admin') {
@@ -55,7 +69,19 @@ module.exports = (pool) => {
       }
 
       const { rows } = await pool.query(query, params);
-      res.json(rows);
+
+      // Mapear contagem para objeto estruturado esperado pelo frontend
+      const result = rows.map(r => ({
+        ...r,
+        contagem: {
+          Crítico: parseInt(r.cnt_critico) || 0,
+          Alto:    parseInt(r.cnt_alto)    || 0,
+          Médio:   parseInt(r.cnt_medio)   || 0,
+          Baixo:   parseInt(r.cnt_baixo)   || 0
+        }
+      }));
+
+      res.json(result);
     } catch (e) { console.error('ERRO:', e); res.status(500).json({ erro: e.message }); }
   });
 

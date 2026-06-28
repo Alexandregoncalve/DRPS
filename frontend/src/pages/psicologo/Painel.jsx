@@ -3,6 +3,7 @@ import { useAuth, API } from "../../contexts/AuthContext";
 import { Layout } from "../../components/Layout";
 import { Card, Btn, BadgeRisco, BarraProgresso, Alert, Input, Select } from "../../components/ui";
 import CriteriosProbabilidadeModal from "./CriteriosProbabilidadeModal";
+import Resultados from "./Resultados";
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from "recharts";
 
 const SETORES_COMUNS = [
@@ -190,25 +191,6 @@ export default function PainelPrincipal() {
 
   async function verResultados(aval) {
     setAvalSelecionada(aval);
-    setProcessando(true); setMsg("");
-    try {
-      const r = await fetch(`${API}/avaliacoes/${aval.id}/resultados`,{headers});
-      const d = await r.json();
-      const p = {};
-      for (let i = 1; i <= 13; i++) p[i] = 2;
-      d.resultados?.forEach(x => { p[x.topico_num] = x.media_probabilidade || 2; });
-      setProbabilidades(p);
-      if (aval.total_respostas > 0) {
-        const probs = Object.entries(p).map(([t,v])=>({topico_num:parseInt(t),valor:parseInt(v)}));
-        await fetch(`${API}/avaliacoes/${aval.id}/probabilidades`,{method:"POST",headers,body:JSON.stringify({probabilidades:probs})});
-        await fetch(`${API}/avaliacoes/${aval.id}/processar`,{method:"POST",headers});
-        const r2 = await fetch(`${API}/avaliacoes/${aval.id}/resultados`,{headers});
-        setResultados(await r2.json());
-      } else {
-        setResultados(d);
-      }
-    } catch(e) { setErro("Erro ao carregar resultados."); }
-    finally { setProcessando(false); }
     setView("resultados");
   }
 
@@ -374,231 +356,14 @@ export default function PainelPrincipal() {
     );
   }
 
-  // ── VIEW: RESULTADOS ────────────────────────────────────────────────────
-  if (view==="resultados" && avalSelecionada && resultados) {
-    const topRiscos = [...(resultados.resultados||[])].sort((a,b)=>{
-      const ord = {'Crítico':4,'Alto':3,'Médio':2,'Baixo':1};
-      return (ord[b.matriz_risco]||0)-(ord[a.matriz_risco]||0);
-    }).slice(0,5);
-    const topFortes = [...(resultados.resultados||[])].sort((a,b)=>(a.media_gravidade||5)-(b.media_gravidade||5)).slice(0,5);
-    const radarData = (resultados.resultados||[]).map(r=>({
-      topico: r.topico_nome.replace(/^(Baixa |Baixo |Má |Maus |Excesso de |Falta de |Trabalho |Eventos )/,'').slice(0,22),
-      valor: parseFloat(r.media_gravidade)||0,
-    }));
-
+  // ── VIEW: RESULTADOS — usa o componente Resultados.jsx completo ────────
+  if (view === "resultados" && avalSelecionada) {
     return (
-    <Layout titulo="Resultados" subtitulo={`${avalSelecionada.setor_nome} · ${avalSelecionada.empresa_nome}`}
-      acoes={
-        <div className="flex gap-2">
-          <Btn variant="secondary" onClick={exportarCSV}>📥 CSV</Btn>
-          <Btn variant="secondary" onClick={()=>setModalIdentificacao(true)}>📄 PDF</Btn>
-          <Btn variant="secondary" onClick={()=>setView("avaliacoes")}>← Voltar</Btn>
-        </div>
-      }>
-      {msg && <Alert type="success">{msg}</Alert>}
-
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        {[
-          ['Crítico', 'bg-red-700',    'text-white',     'text-red-200'],
-          ['Alto',    'bg-red-400',    'text-white',     'text-red-50'],
-          ['Médio',   'bg-yellow-300', 'text-gray-900',  'text-yellow-800'],
-          ['Baixo',   'bg-green-500',  'text-white',     'text-green-50'],
-        ].map(([k, bg, numCor, labelCor])=>(
-          <div key={k} className={`rounded-xl p-5 text-center ${bg} shadow-sm`}>
-            <p className={`text-4xl font-bold ${numCor}`}>{resultados.contagem?.[k]||0}</p>
-            <p className={`text-sm font-semibold mt-1 ${labelCor}`}>{k}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <Card className="p-4">
-          <h3 className="text-sm font-semibold text-gray-800 mb-3">🔴 Top 5 Riscos Prioritários</h3>
-          <div className="space-y-2">
-            {topRiscos.map(r=>{
-              const s = semaforoMatriz(r.matriz_risco);
-              return (
-                <div key={r.topico_num} className="flex items-center justify-between">
-                  <span className="text-xs text-gray-700 truncate flex-1 mr-2">{r.topico_nome}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cor}`}>{s.icone} {s.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-        <Card className="p-4">
-          <h3 className="text-sm font-semibold text-gray-800 mb-3">🟢 Top 5 Pontos Fortes</h3>
-          <div className="space-y-2">
-            {topFortes.map(r=>(
-              <div key={r.topico_num} className="flex items-center justify-between">
-                <span className="text-xs text-gray-700 truncate flex-1 mr-2">{r.topico_nome}</span>
-                <span className={`text-xs font-medium ${semaforoGrav(r.classif_gravidade)}`}>{r.classif_gravidade}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-
-      <Card className="p-4 mb-6">
-        <h3 className="text-sm font-semibold text-gray-800 mb-3">📡 Panorama Geral (Radar)</h3>
-        <div id="radar-chart-container">
-          <ResponsiveContainer width="100%" height={320}>
-            <RadarChart data={radarData}>
-              <PolarGrid />
-              <PolarAngleAxis dataKey="topico" tick={{fontSize:10}}/>
-              <Tooltip formatter={(v)=>[v.toFixed(2),'Gravidade média']}/>
-              <Radar name="Gravidade" dataKey="valor" stroke="#0A2647" fill="#0A2647" fillOpacity={0.25}/>
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
-
-      <Card className="overflow-hidden mb-4">
-        <table className="w-full text-sm">
-          <thead><tr className="border-b border-gray-100 bg-gray-50">
-            <th className="text-left px-3 py-2 text-xs text-gray-400 font-medium">Tópico</th>
-            <th className="px-2 py-2 text-xs text-gray-400 font-medium w-16">Grav.</th>
-            <th className="px-2 py-2 text-xs text-gray-400 font-medium w-14">Prob.</th>
-            <th className="px-2 py-2 text-xs text-gray-400 font-medium w-20">Matriz</th>
-            <th className="px-2 py-2 text-xs text-gray-400 font-medium w-48">Definir probabilidade</th>
-          </tr></thead>
-          <tbody>
-            {resultados.resultados.map(r=>{
-              const s = semaforoMatriz(r.matriz_risco);
-              return (
-              <tr key={r.topico_num} className="border-b border-gray-50 hover:bg-gray-50">
-                <td className="px-3 py-2 text-xs text-gray-700">{r.topico_nome}</td>
-                <td className="px-2 py-2 text-center"><span className={`text-xs font-medium ${semaforoGrav(r.classif_gravidade)}`}>{r.classif_gravidade}</span></td>
-                <td className="px-2 py-2 text-center"><span className="text-xs text-gray-600">{r.classif_probabilidade}</span></td>
-                <td className="px-2 py-2 text-center"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cor}`}>{s.label}</span></td>
-                <td className="px-2 py-2">
-                  <div className="flex items-center gap-1.5">
-                    <select value={probabilidades[r.topico_num]||2}
-                      onChange={ev=>setProbabilidades({...probabilidades,[r.topico_num]:ev.target.value})}
-                      className="border border-gray-200 rounded px-1.5 py-1 text-xs bg-white text-gray-900 flex-1">
-                      <option value={1}>1 - Baixa</option><option value={2}>2 - Média</option><option value={3}>3 - Alta</option>
-                    </select>
-                    <button type="button" onClick={()=>setTopicoModalAberto(r)}
-                      className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1 hover:bg-blue-100 whitespace-nowrap flex-shrink-0">
-                      📋 Critérios
-                    </button>
-                  </div>
-                </td>
-              </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </Card>
-
-      {resultados.resultados.filter(r=>r.matriz_risco==='Alto'||r.matriz_risco==='Crítico').length > 0 && (
-        <Card className="p-4 mb-4">
-          <h3 className="text-sm font-semibold text-gray-800 mb-3">⚡ Plano de Ação — Riscos Prioritários</h3>
-          <div className="space-y-4">
-            {resultados.resultados.filter(r=>r.matriz_risco==='Alto'||r.matriz_risco==='Crítico').map(r=>{
-              const s = semaforoMatriz(r.matriz_risco);
-              return (
-                <div key={r.topico_num} className="border-l-4 border-orange-400 pl-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.cor}`}>{s.icone} {s.label}</span>
-                    <span className="text-xs font-semibold text-gray-800">{r.topico_nome}</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mb-1">Fonte: {r.fonte_geradora}</p>
-                  {r.acoes_sugeridas?.length > 0 && (
-                    <ul className="text-xs text-gray-700 space-y-0.5 list-disc list-inside">
-                      {r.acoes_sugeridas.map((a,i)=><li key={i}>{a}</li>)}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-
-      {/* ✅ QR CODE REMOVIDO DAQUI — agora aparece só na tela de criação */}
-
-      {modalIdentificacao && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="p-5 rounded-t-2xl" style={{background:'#0A2647'}}>
-              <h2 className="text-white font-bold text-lg">📋 Identificação do Laudo — NR-01</h2>
-              <p className="text-blue-200 text-sm mt-1">Preencha os dados complementares para o laudo oficial</p>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="bg-gray-50 rounded-xl p-3 space-y-1">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Preenchido automaticamente</p>
-                <p className="text-sm text-gray-700"><span className="font-medium">Empresa:</span> {avalSelecionada?.empresa_nome}</p>
-                <p className="text-sm text-gray-700"><span className="font-medium">Setor:</span> {avalSelecionada?.setor_nome}</p>
-                <p className="text-sm text-gray-700"><span className="font-medium">Responsável técnico:</span> {usuario.nome} {usuario.crp ? `— CRP: ${usuario.crp}` : ''}</p>
-                <p className="text-sm text-gray-700"><span className="font-medium">Data:</span> {new Date().toLocaleDateString('pt-BR')}</p>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Funções/cargos avaliados neste setor *</label>
-                <input type="text" placeholder="Ex: Analista, Assistente Administrativo, Coordenador"
-                  value={dadosIdentificacao.funcoes}
-                  onChange={e=>setDadosIdentificacao({...dadosIdentificacao, funcoes:e.target.value})}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"/>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Quantidade — Homens</label>
-                  <input type="number" min="0" placeholder="0"
-                    value={dadosIdentificacao.homens}
-                    onChange={e=>setDadosIdentificacao({...dadosIdentificacao, homens:e.target.value})}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"/>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Quantidade — Mulheres</label>
-                  <input type="number" min="0" placeholder="0"
-                    value={dadosIdentificacao.mulheres}
-                    onChange={e=>setDadosIdentificacao({...dadosIdentificacao, mulheres:e.target.value})}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"/>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Possíveis agravos à saúde mental</label>
-                <textarea placeholder="Ex: Burnout, transtornos de ansiedade..."
-                  value={dadosIdentificacao.agravos}
-                  onChange={e=>setDadosIdentificacao({...dadosIdentificacao, agravos:e.target.value})}
-                  rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 resize-none"/>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Medidas de controle existentes</label>
-                <textarea placeholder="Ex: Programa de apoio psicológico, canal de denúncias..."
-                  value={dadosIdentificacao.medidas_controle}
-                  onChange={e=>setDadosIdentificacao({...dadosIdentificacao, medidas_controle:e.target.value})}
-                  rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 resize-none"/>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button onClick={()=>setModalIdentificacao(false)}
-                  className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-3 text-sm font-medium hover:bg-gray-50">Cancelar</button>
-                <button onClick={()=>{ setModalIdentificacao(false); exportarPDF(dadosIdentificacao); }}
-                  className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-sm font-bold hover:bg-blue-700">Gerar PDF completo →</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {topicoModalAberto && (
-        <CriteriosProbabilidadeModal
-          avaliacaoId={avalSelecionada.id}
-          topicoNum={topicoModalAberto.topico_num}
-          topicoNome={topicoModalAberto.topico_nome}
-          onFechar={()=>setTopicoModalAberto(null)}
-          onAplicar={(sugestao)=>{ setProbabilidades({...probabilidades,[topicoModalAberto.topico_num]:sugestao}); }}
-        />
-      )}
-      <div>
-        <Btn onClick={salvarProbabilidades} disabled={processando}>
-          {processando ? "Processando..." : "Salvar e processar matriz"}
-        </Btn>
-        <p className="text-xs text-gray-400 mt-2">
-          Confirme a probabilidade de cada tópico acima antes de processar. O valor padrão é "2 - Média" até você ajustar.
-        </p>
-      </div>
-    </Layout>
+      <Resultados
+        avaliacaoId={avalSelecionada.id}
+        token={token}
+        onVoltar={() => setView("avaliacoes")}
+      />
     );
   }
 
