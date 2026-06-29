@@ -14,7 +14,7 @@ const FRONTEND_URL       = process.env.FRONTEND_URL       || 'http://localhost:8
 async function enviarWhatsApp(telefone, mensagem) {
   try {
     const numero = telefone.replace(/\D/g, '');
-    const numeroFull = numero.startsWith('55') ? numero : `55${numero}`;
+    const numeroFull = (numero.startsWith('55') && numero.length >= 12) ? numero : `55${numero}`;
     const resp = await fetch(`${EVOLUTION_URL}/message/sendText/${EVOLUTION_INSTANCE}`, {
       method: 'POST',
       headers: { 'apikey': EVOLUTION_KEY, 'Content-Type': 'application/json' },

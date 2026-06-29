@@ -76,6 +76,14 @@ module.exports = (pool) => {
       }
       await client.query('UPDATE avaliacoes SET total_respostas=COALESCE(total_respostas,0)+1 WHERE id=$1', [avaliacaoId]);
 
+      // Marca colaborador como respondeu (via ip_hash ou token — LGPD: sem cruzar com respostas)
+      await client.query(
+        `UPDATE colaboradores SET respondeu=true WHERE avaliacao_id=$1 AND token_unico IN (
+          SELECT token_unico FROM colaboradores WHERE avaliacao_id=$1 AND respondeu=false LIMIT 1
+        )`,
+        [avaliacaoId]
+      );
+
       // Se atingiu 100% das respostas esperadas, muda status para 'coletada'
       const { rows: checkRows } = await client.query(
         'SELECT a.total_respostas, s.total_funcionarios FROM avaliacoes a JOIN setores s ON a.setor_id=s.id WHERE a.id=$1',

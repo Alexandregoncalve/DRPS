@@ -17,6 +17,9 @@ export default function ColaboradoresModal({ avaliacao, token, onFechar }) {
   const [reenviando, setReenviando] = useState(null);
   const fileRef = useRef();
 
+  const [reenviandoTodos, setReenviandoTodos] = useState(false);
+  const [msgReenvio, setMsgReenvio] = useState("");
+
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
   // Carrega status dos colaboradores
@@ -28,6 +31,25 @@ export default function ColaboradoresModal({ avaliacao, token, onFechar }) {
       setColaboradores(d.colaboradores || []);
     } catch (e) {}
     setCarregando(false);
+  }
+
+  // Reenviar para todos os pendentes
+  async function reenviarTodos() {
+    const pendentes = colaboradores.filter(c => !c.respondeu);
+    if (pendentes.length === 0) return;
+    setReenviandoTodos(true); setMsgReenvio(`⏳ Reenviando para ${pendentes.length} pendentes...`);
+    let ok = 0; let erro = 0;
+    for (const c of pendentes) {
+      try {
+        const r = await fetch(`${API}/colaboradores/${avaliacao.id}/reenviar/${c.id}`, { method: "POST", headers });
+        const d = await r.json();
+        if (d.ok) ok++; else erro++;
+      } catch(e) { erro++; }
+      await new Promise(r => setTimeout(r, 800));
+    }
+    setMsgReenvio(`✅ ${ok} enviados · ${erro} erros`);
+    setReenviandoTodos(false);
+    carregarStatus();
   }
 
   // Lê o arquivo Excel/CSV
@@ -205,43 +227,102 @@ export default function ColaboradoresModal({ avaliacao, token, onFechar }) {
                 <p style={{ color:"#64748b", textAlign:"center", padding:32 }}>Nenhum colaborador importado ainda.</p>
               ) : (
                 <div>
-                  {/* Resumo */}
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:20 }}>
-                    {[
-                      ["Total", colaboradores.length, "#6366f1"],
-                      ["Responderam", colaboradores.filter(c=>c.respondeu).length, "#22c55e"],
-                      ["Pendentes", colaboradores.filter(c=>!c.respondeu).length, "#f59e0b"],
-                    ].map(([label, valor, cor]) => (
-                      <div key={label} style={{ background:"#0f172a", borderRadius:8, padding:"12px 16px", textAlign:"center" }}>
-                        <p style={{ color:cor, fontSize:24, fontWeight:700, margin:0 }}>{valor}</p>
-                        <p style={{ color:"#64748b", fontSize:11, margin:0 }}>{label}</p>
-                      </div>
-                    ))}
+                  {/* Resumo com barra de progresso */}
+                  <div style={{ background:"#0f172a", borderRadius:10, padding:"16px 20px", marginBottom:16 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                      <p style={{ color:"#f1f5f9", fontSize:14, fontWeight:600, margin:0 }}>
+                        Progresso da avaliação
+                      </p>
+                      <p style={{ color:"#94a3b8", fontSize:13, margin:0 }}>
+                        {colaboradores.filter(c=>c.respondeu).length} de {colaboradores.length} responderam
+                      </p>
+                    </div>
+                    <div style={{ height:8, background:"#334155", borderRadius:4, overflow:"hidden", marginBottom:12 }}>
+                      <div style={{
+                        height:"100%", borderRadius:4, background:"#22c55e",
+                        width:`${Math.round((colaboradores.filter(c=>c.respondeu).length/colaboradores.length)*100)}%`,
+                        transition:"width .3s"
+                      }} />
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
+                      {[
+                        ["Total", colaboradores.length, "#6366f1"],
+                        ["Responderam", colaboradores.filter(c=>c.respondeu).length, "#22c55e"],
+                        ["Enviados", colaboradores.filter(c=>c.enviado && !c.respondeu).length, "#f59e0b"],
+                        ["Não enviados", colaboradores.filter(c=>!c.enviado && !c.respondeu).length, "#ef4444"],
+                      ].map(([label, valor, cor]) => (
+                        <div key={label} style={{ background:"#1e293b", borderRadius:8, padding:"10px", textAlign:"center" }}>
+                          <p style={{ color:cor, fontSize:22, fontWeight:700, margin:0 }}>{valor}</p>
+                          <p style={{ color:"#64748b", fontSize:10, margin:0 }}>{label}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
-                  {/* Lista */}
-                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                    {colaboradores.map(c => (
-                      <div key={c.id} style={{ background:"#0f172a", border:"1px solid #334155", borderRadius:8, padding:"10px 14px",
-                        display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
-                        <div style={{ flex:1 }}>
-                          <p style={{ color:"#e2e8f0", fontSize:13, margin:"0 0 2px" }}>
-                            📱 {c.telefone} {c.setor && <span style={{ color:"#64748b", fontSize:11 }}>· {c.setor}</span>}
-                          </p>
-                          <p style={{ color:"#475569", fontSize:11, margin:0 }}>
-                            {c.respondeu ? "✅ Respondeu" : c.enviado ? `📤 Enviado em ${new Date(c.enviado_em).toLocaleDateString('pt-BR')}` : "⏳ Não enviado"}
-                          </p>
+                  {/* Botão reenviar para todos pendentes */}
+                  {colaboradores.filter(c=>!c.respondeu).length > 0 && (
+                    <div style={{ marginBottom:16 }}>
+                      <button onClick={reenviarTodos} disabled={reenviandoTodos}
+                        style={{ width:"100%", padding:"10px", background:"#0f172a",
+                          border:"1px solid #4f46e5", borderRadius:8, color:"#a5b4fc",
+                          fontSize:13, fontWeight:600, cursor: reenviandoTodos ? "not-allowed":"pointer" }}>
+                        {reenviandoTodos ? msgReenvio : `🔁 Reenviar para todos os pendentes (${colaboradores.filter(c=>!c.respondeu).length})`}
+                      </button>
+                      {msgReenvio && !reenviandoTodos && (
+                        <p style={{ color:"#86efac", fontSize:12, textAlign:"center", margin:"6px 0 0" }}>{msgReenvio}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Lista por status */}
+                  {["respondeu", "enviado", "pendente"].map(grupo => {
+                    const itens = colaboradores.filter(c =>
+                      grupo === "respondeu" ? c.respondeu :
+                      grupo === "enviado" ? (c.enviado && !c.respondeu) :
+                      (!c.enviado && !c.respondeu)
+                    );
+                    if (itens.length === 0) return null;
+                    const configs = {
+                      respondeu: { label: "✅ Responderam", cor: "#22c55e" },
+                      enviado:   { label: "📤 Link enviado — aguardando resposta", cor: "#f59e0b" },
+                      pendente:  { label: "⏳ Não enviado", cor: "#ef4444" },
+                    };
+                    return (
+                      <div key={grupo} style={{ marginBottom:16 }}>
+                        <p style={{ color: configs[grupo].cor, fontSize:12, fontWeight:700,
+                          letterSpacing:"0.06em", margin:"0 0 8px" }}>
+                          {configs[grupo].label} ({itens.length})
+                        </p>
+                        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                          {itens.map(c => (
+                            <div key={c.id} style={{ background:"#0f172a", border:"1px solid #334155",
+                              borderRadius:8, padding:"8px 12px", display:"flex",
+                              alignItems:"center", justifyContent:"space-between", gap:12 }}>
+                              <div style={{ flex:1 }}>
+                                <p style={{ color:"#e2e8f0", fontSize:13, margin:"0 0 2px" }}>
+                                  📱 {c.telefone}
+                                  {c.setor && <span style={{ color:"#64748b", fontSize:11, marginLeft:8 }}>· {c.setor}</span>}
+                                </p>
+                                {c.enviado_em && (
+                                  <p style={{ color:"#475569", fontSize:10, margin:0 }}>
+                                    Enviado: {new Date(c.enviado_em).toLocaleString('pt-BR')}
+                                  </p>
+                                )}
+                              </div>
+                              {!c.respondeu && (
+                                <button onClick={() => reenviar(c.id)} disabled={reenviando===c.id}
+                                  style={{ padding:"4px 10px", background:"transparent",
+                                    border:"1px solid #334155", borderRadius:6,
+                                    color:"#94a3b8", fontSize:11, cursor:"pointer", flexShrink:0 }}>
+                                  {reenviando===c.id ? "..." : "🔁 Reenviar"}
+                                </button>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                        {!c.respondeu && (
-                          <button onClick={() => reenviar(c.id)} disabled={reenviando===c.id}
-                            style={{ padding:"4px 10px", background:"transparent", border:"1px solid #334155",
-                              borderRadius:6, color:"#94a3b8", fontSize:11, cursor:"pointer" }}>
-                            {reenviando===c.id ? "..." : "🔁 Reenviar"}
-                          </button>
-                        )}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
