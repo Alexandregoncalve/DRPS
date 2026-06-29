@@ -5,7 +5,6 @@ const rateLimit  = require('express-rate-limit');
 const { Pool }   = require('pg');
 
 const app = express();
-app.set('trust proxy', 1);
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 app.use(cors({
@@ -70,6 +69,7 @@ app.use('/api/responder',                 require('./routes/responder')(pool));
 app.use('/api/usuarios',                  require('./routes/usuarios')(pool));
 app.use('/api/laudo',      require('./routes/laudo')(pool));
 app.use('/api/relatorio',     require('./routes/relatorio')(pool));
+app.use('/api/plano-acao',    require('./routes/plano_acao')(pool));
 app.use('/api/colaboradores', require('./routes/colaboradores')(pool));
 app.use('/api/importar',      require('./routes/importar')(pool));
 

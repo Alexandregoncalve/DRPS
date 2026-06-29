@@ -81,10 +81,22 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
   const [salvando,  setSalvando]  = useState(false);
   const [msg,       setMsg]       = useState('');
   const [modalConfig, setModalConfig] = useState(false);
+  const [fichasPlano, setFichasPlano] = useState({}); // { topico_num: ficha }
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
   useEffect(() => { carregar(); }, [avaliacaoId]);
+
+  async function carregarFichas() {
+    if (avaliacaoId === 'consolidado') return;
+    try {
+      const r = await fetch(`${API}/plano-acao/${avaliacaoId}`, { headers });
+      const fichas = await r.json();
+      const mapa = {};
+      fichas.forEach(f => { mapa[f.topico_num] = f; });
+      setFichasPlano(mapa);
+    } catch(e) {}
+  }
 
   async function carregar() {
     setLoading(true); setErro('');
@@ -100,6 +112,7 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
       const p = {};
       d.resultados.forEach(r => { p[r.topico_num] = r.media_probabilidade || 2; });
       setProbLocal(p);
+      carregarFichas();
     } catch (e) { setErro(e.message); }
     finally { setLoading(false); }
   }
@@ -132,7 +145,8 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
   );
 
   const { avaliacao, config, resultados, contagem, top5, radarData,
-    inventarioMTE, inventarioFontes, matrizAIHA, controles, glossario, periodicidade, comparativo } = dados;
+    inventarioMTE, inventarioFontes, matrizAIHA, controles, glossario, periodicidade, comparativo,
+    fichasConsolidadas } = dados;
 
   const ABAS = [
     { id: 'resumo',      label: '📊 Resumo' },
@@ -187,10 +201,12 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
           </p>
         </div>
         {msg && <span style={{ fontSize: 13, color: msg.startsWith('✅') ? '#86efac' : '#f87171' }}>{msg}</span>}
-        <button onClick={() => setModalConfig(true)} style={{
-          padding: '8px 16px', background: '#334155', border: '1px solid #475569',
-          borderRadius: 8, color: '#e2e8f0', fontSize: 13, cursor: 'pointer', flexShrink: 0,
-        }}>⚙️ Configurar relatório</button>
+        {avaliacaoId !== 'consolidado' && (
+          <button onClick={() => setModalConfig(true)} style={{
+            padding: '8px 16px', background: '#334155', border: '1px solid #475569',
+            borderRadius: 8, color: '#e2e8f0', fontSize: 13, cursor: 'pointer', flexShrink: 0,
+          }}>⚙️ Configurar relatório</button>
+        )}
       </div>
 
       {/* Abas */}
@@ -882,7 +898,7 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
                   acompanhamento e aferição de resultados.
                 </InfoBox>
                 {resultados.filter(r => r.matriz_risco==='Crítico'||r.matriz_risco==='Alto')
-                  .map(r => <CardPlano key={r.topico_num} resultado={r} />)}
+                  .map(r => <CardPlano key={r.topico_num} resultado={r} avaliacaoId={avaliacaoId} token={token} fichaInicial={fichasPlano[r.topico_num]} fichasConsolidadas={fichasConsolidadas?.[r.topico_num]} />)}
               </Secao>
             )}
             {resultados.filter(r => r.matriz_risco==='Médio').length > 0 && (
@@ -892,7 +908,7 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
                   para evitar agravamento. Conforme NR-01 item 1.5.4.1.
                 </InfoBox>
                 {resultados.filter(r => r.matriz_risco==='Médio')
-                  .map(r => <CardPlano key={r.topico_num} resultado={r} />)}
+                  .map(r => <CardPlano key={r.topico_num} resultado={r} avaliacaoId={avaliacaoId} token={token} fichaInicial={fichasPlano[r.topico_num]} fichasConsolidadas={fichasConsolidadas?.[r.topico_num]} />)}
               </Secao>
             )}
             {controles.length > 0 && (
@@ -1157,11 +1173,52 @@ SESMT / Departamento de Saúde Ocupacional`;
   navigator.clipboard.writeText(texto).then(() => alert('✅ Texto copiado!'));
 }
 
-// ── Card do Plano de Ação ─────────────────────────────────────────────────────
-function CardPlano({ resultado: r }) {
-  const [expandido, setExpandido] = useState(false);
+// ── Card do Plano de Ação EDITÁVEL ───────────────────────────────────────────
+function CardPlano({ resultado: r, avaliacaoId, token, fichaInicial, fichasConsolidadas }) {
+  const [expandido, setExpandido]   = useState(false);
+  const [editando,  setEditando]    = useState(false);
+  const [salvando,  setSalvando]    = useState(false);
+  const [msgSalvo,  setMsgSalvo]    = useState('');
+
+  const STATUS_OPT = ['Pendente','Em andamento','Concluído','Cancelado'];
+  const COR_STATUS = {
+    'Pendente':      { bg:'#713f1222', cor:'#fde68a' },
+    'Em andamento':  { bg:'#1e3a5f22', cor:'#93c5fd' },
+    'Concluído':     { bg:'#14532d22', cor:'#86efac' },
+    'Cancelado':     { bg:'#7f1d1d22', cor:'#fca5a5' },
+  };
+
+  const [ficha, setFicha] = useState({
+    responsavel:         fichaInicial?.responsavel         || '',
+    prazo:               fichaInicial?.prazo?.slice(0,10)  || '',
+    forma_acompanhamento:fichaInicial?.forma_acompanhamento|| '',
+    recurso_necessario:  fichaInicial?.recurso_necessario  || '',
+    data_verificacao:    fichaInicial?.data_verificacao?.slice(0,10) || '',
+    status:              fichaInicial?.status              || 'Pendente',
+    observacoes:         fichaInicial?.observacoes         || '',
+  });
+
+  const headers = { 'Content-Type':'application/json', Authorization:`Bearer ${token}` };
+
+  async function salvar() {
+    setSalvando(true); setMsgSalvo('');
+    try {
+      const resp = await fetch(`${API}/plano-acao/${avaliacaoId}/${r.topico_num}`, {
+        method:'POST', headers,
+        body: JSON.stringify({ topico_nome: r.topico_nome, ...ficha }),
+      });
+      if (resp.ok) { setMsgSalvo('✅ Salvo!'); setEditando(false); }
+      else setMsgSalvo('❌ Erro ao salvar');
+    } catch(e) { setMsgSalvo('❌ ' + e.message); }
+    setSalvando(false);
+    setTimeout(() => setMsgSalvo(''), 3000);
+  }
+
+  const corStatus = COR_STATUS[ficha.status] || COR_STATUS['Pendente'];
+
   return (
-    <Card style={{ marginBottom: 16, borderLeft: `4px solid ${COR_BAR[r.matriz_risco]||'#334155'}` }}>
+    <Card style={{ marginBottom:16, borderLeft:`4px solid ${COR_BAR[r.matriz_risco]||'#334155'}` }}>
+      {/* Cabeçalho */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
         <div>
           <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
@@ -1169,47 +1226,232 @@ function CardPlano({ resultado: r }) {
             <h3 style={{ color:'#f1f5f9', fontSize:14, fontWeight:700, margin:0 }}>{r.topico_nome}</h3>
           </div>
           <p style={{ color:'#94a3b8', fontSize:12, margin:0 }}>
-            Fator PGR · Score: {parseFloat(r.media_gravidade).toFixed(2)}
+            Score: {parseFloat(r.media_gravidade).toFixed(2)}
+            {r.fonte_geradora && <span style={{ color:'#475569' }}> · {r.fonte_geradora}</span>}
           </p>
         </div>
-        <button onClick={() => setExpandido(!expandido)} style={{ ...btnSecundario, fontSize:11 }}>
-          {expandido ? '▲ Recolher' : '▼ Ver ficha'}
-        </button>
+        <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
+          <span style={{ background:corStatus.bg, color:corStatus.cor,
+            borderRadius:6, padding:'3px 10px', fontSize:11, fontWeight:600 }}>
+            {ficha.status}
+          </span>
+          <button onClick={() => { setExpandido(!expandido); if (!expandido) setEditando(false); }}
+            style={{ ...btnSecundario, fontSize:11 }}>
+            {expandido ? '▲ Recolher' : '▼ Ver ficha'}
+          </button>
+        </div>
       </div>
 
-      {(r.acoes_sugeridas || []).map((acao, i) => (
-        <div key={i} style={{ background:'#0f172a', borderRadius:8, padding:'12px 14px', marginBottom:8 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>
-            <span style={{ background:'#1e3a5f', color:'#93c5fd', borderRadius:4,
-              padding:'1px 7px', fontSize:10, fontWeight:600 }}>ADMINISTRATIVA</span>
-            <span style={{ color:'#e2e8f0', fontSize:13 }}>{acao}</span>
-          </div>
-          <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
-            <span style={{ color:'#64748b', fontSize:11 }}>Responsável: <span style={{ color:'#94a3b8' }}>—</span></span>
-            <span style={{ color:'#64748b', fontSize:11 }}>Prazo: <span style={{ color:'#94a3b8' }}>—</span></span>
-            <span style={{ color:'#64748b', fontSize:11 }}>Status: <span style={{ color:'#fbbf24' }}>Pendente</span></span>
-          </div>
+      {/* Ações sugeridas */}
+      {(r.acoes_sugeridas || []).length > 0 && (
+        <div style={{ marginBottom:12 }}>
+          {r.acoes_sugeridas.map((acao, i) => (
+            <div key={i} style={{ background:'#0f172a', borderRadius:8, padding:'8px 12px', marginBottom:6,
+              display:'flex', alignItems:'center', gap:8 }}>
+              <span style={{ background:'#1e3a5f', color:'#93c5fd', borderRadius:4,
+                padding:'1px 7px', fontSize:10, fontWeight:600, flexShrink:0 }}>AÇÃO</span>
+              <span style={{ color:'#e2e8f0', fontSize:13 }}>{acao}</span>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
 
-      {expandido && (
-        <div style={{ marginTop:12, background:'#0f172a', borderRadius:8, padding:'14px 16px' }}>
-          <p style={{ color:'#64748b', fontSize:11, fontWeight:700, margin:'0 0 8px', letterSpacing:'0.08em' }}>
-            FICHA DE IMPLEMENTAÇÃO — NR-01 HIERARQUIA DE CONTROLES
+      {/* Ficha expandida */}
+      {/* Fichas consolidadas das filiais — somente leitura */}
+      {fichasConsolidadas && fichasConsolidadas.length > 0 && expandido && (
+        <div style={{ marginTop:12 }}>
+          <p style={{ color:'#64748b', fontSize:11, fontWeight:700, letterSpacing:'0.08em', margin:'0 0 10px' }}>
+            AÇÕES POR FILIAL
           </p>
-          {r.fonte_geradora && (
-            <p style={{ color:'#94a3b8', fontSize:12, margin:'0 0 8px' }}>
-              <strong style={{ color:'#475569' }}>Fonte geradora:</strong> {r.fonte_geradora}
-            </p>
-          )}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
-            {[['Responsável pela ação','—'],['Prazo de implementação','—'],['Forma de acompanhamento','—'],
-              ['Recurso necessário','—'],['Data de verificação','—'],['Status','Pendente']].map(([k,v]) => (
-              <div key={k} style={{ background:'#1e293b', borderRadius:6, padding:'8px 10px' }}>
-                <p style={{ color:'#475569', fontSize:10, margin:'0 0 2px' }}>{k}</p>
-                <p style={{ color:'#94a3b8', fontSize:12, margin:0 }}>{v}</p>
+          {fichasConsolidadas.map((f, i) => {
+            const COR_STATUS = {
+              'Pendente':     { bg:'#713f1222', cor:'#fde68a' },
+              'Em andamento': { bg:'#1e3a5f22', cor:'#93c5fd' },
+              'Concluído':    { bg:'#14532d22', cor:'#86efac' },
+              'Cancelado':    { bg:'#7f1d1d22', cor:'#fca5a5' },
+            };
+            const corS = COR_STATUS[f.status] || COR_STATUS['Pendente'];
+            return (
+              <div key={i} style={{ background:'#0f172a', border:'1px solid #334155',
+                borderRadius:8, padding:'12px 14px', marginBottom:8 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                  <p style={{ color:'#e2e8f0', fontSize:13, fontWeight:600, margin:0 }}>
+                    🏢 {f.empresa_nome} · {f.setor_nome}
+                  </p>
+                  <span style={{ background:corS.bg, color:corS.cor,
+                    borderRadius:6, padding:'2px 10px', fontSize:11, fontWeight:600 }}>
+                    {f.status}
+                  </span>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                  {f.responsavel && (
+                    <div>
+                      <p style={{ color:'#475569', fontSize:10, margin:'0 0 2px' }}>RESPONSÁVEL</p>
+                      <p style={{ color:'#94a3b8', fontSize:12, margin:0 }}>{f.responsavel}</p>
+                    </div>
+                  )}
+                  {f.prazo && (
+                    <div>
+                      <p style={{ color:'#475569', fontSize:10, margin:'0 0 2px' }}>PRAZO</p>
+                      <p style={{ color:'#94a3b8', fontSize:12, margin:0 }}>
+                        {new Date(f.prazo+'T12:00:00').toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                  )}
+                  {f.forma_acompanhamento && (
+                    <div>
+                      <p style={{ color:'#475569', fontSize:10, margin:'0 0 2px' }}>ACOMPANHAMENTO</p>
+                      <p style={{ color:'#94a3b8', fontSize:12, margin:0 }}>{f.forma_acompanhamento}</p>
+                    </div>
+                  )}
+                  {f.observacoes && (
+                    <div style={{ gridColumn:'1/-1' }}>
+                      <p style={{ color:'#475569', fontSize:10, margin:'0 0 2px' }}>OBSERVAÇÕES</p>
+                      <p style={{ color:'#94a3b8', fontSize:12, margin:0 }}>{f.observacoes}</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            ))}
+            );
+          })}
+        </div>
+      )}
+
+      {/* Ficha expandida individual */}
+      {!fichasConsolidadas && expandido && (
+        <div style={{ background:'#0f172a', borderRadius:10, padding:'16px', marginTop:8 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+            <p style={{ color:'#64748b', fontSize:11, fontWeight:700, letterSpacing:'0.08em', margin:0 }}>
+              FICHA DE IMPLEMENTAÇÃO — NR-01
+            </p>
+            <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+              {msgSalvo && <span style={{ fontSize:12, color: msgSalvo.startsWith('✅') ? '#86efac':'#f87171' }}>{msgSalvo}</span>}
+              {avaliacaoId !== 'consolidado' && (editando ? (
+                <>
+                  <button onClick={salvar} disabled={salvando}
+                    style={{ ...btnPrimario, fontSize:12, padding:'5px 14px' }}>
+                    {salvando ? 'Salvando...' : '💾 Salvar'}
+                  </button>
+                  <button onClick={() => setEditando(false)} style={{ ...btnSecundario, fontSize:12, padding:'5px 12px' }}>
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setEditando(true)} style={{ ...btnSecundario, fontSize:12, padding:'5px 12px' }}>
+                  ✏️ Editar
+                </button>
+              ))}
+              {avaliacaoId === 'consolidado' && (
+                <span style={{ color:'#475569', fontSize:11 }}>Somente leitura — edite em cada filial</span>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+            {/* Responsável */}
+            <div>
+              <p style={{ color:'#475569', fontSize:10, margin:'0 0 4px', fontWeight:600 }}>RESPONSÁVEL PELA AÇÃO</p>
+              {editando ? (
+                <input value={ficha.responsavel} onChange={e => setFicha(f=>({...f, responsavel:e.target.value}))}
+                  placeholder="Nome do responsável"
+                  style={{ width:'100%', padding:'6px 10px', background:'#1e293b', border:'1px solid #334155',
+                    borderRadius:6, color:'#f1f5f9', fontSize:13, boxSizing:'border-box' }} />
+              ) : (
+                <p style={{ color: ficha.responsavel ? '#e2e8f0':'#475569', fontSize:13, margin:0 }}>
+                  {ficha.responsavel || '—'}
+                </p>
+              )}
+            </div>
+
+            {/* Prazo */}
+            <div>
+              <p style={{ color:'#475569', fontSize:10, margin:'0 0 4px', fontWeight:600 }}>PRAZO DE IMPLEMENTAÇÃO</p>
+              {editando ? (
+                <input type="date" value={ficha.prazo} onChange={e => setFicha(f=>({...f, prazo:e.target.value}))}
+                  style={{ width:'100%', padding:'6px 10px', background:'#1e293b', border:'1px solid #334155',
+                    borderRadius:6, color:'#f1f5f9', fontSize:13, boxSizing:'border-box' }} />
+              ) : (
+                <p style={{ color: ficha.prazo ? '#e2e8f0':'#475569', fontSize:13, margin:0 }}>
+                  {ficha.prazo ? new Date(ficha.prazo+'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                </p>
+              )}
+            </div>
+
+            {/* Forma de acompanhamento */}
+            <div>
+              <p style={{ color:'#475569', fontSize:10, margin:'0 0 4px', fontWeight:600 }}>FORMA DE ACOMPANHAMENTO</p>
+              {editando ? (
+                <input value={ficha.forma_acompanhamento} onChange={e => setFicha(f=>({...f, forma_acompanhamento:e.target.value}))}
+                  placeholder="Ex: Reunião mensal, pesquisa periódica"
+                  style={{ width:'100%', padding:'6px 10px', background:'#1e293b', border:'1px solid #334155',
+                    borderRadius:6, color:'#f1f5f9', fontSize:13, boxSizing:'border-box' }} />
+              ) : (
+                <p style={{ color: ficha.forma_acompanhamento ? '#e2e8f0':'#475569', fontSize:13, margin:0 }}>
+                  {ficha.forma_acompanhamento || '—'}
+                </p>
+              )}
+            </div>
+
+            {/* Recurso necessário */}
+            <div>
+              <p style={{ color:'#475569', fontSize:10, margin:'0 0 4px', fontWeight:600 }}>RECURSO NECESSÁRIO</p>
+              {editando ? (
+                <input value={ficha.recurso_necessario} onChange={e => setFicha(f=>({...f, recurso_necessario:e.target.value}))}
+                  placeholder="Ex: Treinamento, contratação, software"
+                  style={{ width:'100%', padding:'6px 10px', background:'#1e293b', border:'1px solid #334155',
+                    borderRadius:6, color:'#f1f5f9', fontSize:13, boxSizing:'border-box' }} />
+              ) : (
+                <p style={{ color: ficha.recurso_necessario ? '#e2e8f0':'#475569', fontSize:13, margin:0 }}>
+                  {ficha.recurso_necessario || '—'}
+                </p>
+              )}
+            </div>
+
+            {/* Data de verificação */}
+            <div>
+              <p style={{ color:'#475569', fontSize:10, margin:'0 0 4px', fontWeight:600 }}>DATA DE VERIFICAÇÃO</p>
+              {editando ? (
+                <input type="date" value={ficha.data_verificacao} onChange={e => setFicha(f=>({...f, data_verificacao:e.target.value}))}
+                  style={{ width:'100%', padding:'6px 10px', background:'#1e293b', border:'1px solid #334155',
+                    borderRadius:6, color:'#f1f5f9', fontSize:13, boxSizing:'border-box' }} />
+              ) : (
+                <p style={{ color: ficha.data_verificacao ? '#e2e8f0':'#475569', fontSize:13, margin:0 }}>
+                  {ficha.data_verificacao ? new Date(ficha.data_verificacao+'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                </p>
+              )}
+            </div>
+
+            {/* Status */}
+            <div>
+              <p style={{ color:'#475569', fontSize:10, margin:'0 0 4px', fontWeight:600 }}>STATUS</p>
+              {editando ? (
+                <select value={ficha.status} onChange={e => setFicha(f=>({...f, status:e.target.value}))}
+                  style={{ width:'100%', padding:'6px 10px', background:'#1e293b', border:'1px solid #334155',
+                    borderRadius:6, color:'#f1f5f9', fontSize:13, boxSizing:'border-box' }}>
+                  {STATUS_OPT.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              ) : (
+                <span style={{ background:corStatus.bg, color:corStatus.cor,
+                  borderRadius:6, padding:'3px 10px', fontSize:12, fontWeight:600 }}>
+                  {ficha.status}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Observações */}
+          <div>
+            <p style={{ color:'#475569', fontSize:10, margin:'0 0 4px', fontWeight:600 }}>OBSERVAÇÕES</p>
+            {editando ? (
+              <textarea value={ficha.observacoes} onChange={e => setFicha(f=>({...f, observacoes:e.target.value}))}
+                placeholder="Notas adicionais, contexto, dificuldades..."
+                rows={3} style={{ width:'100%', padding:'6px 10px', background:'#1e293b', border:'1px solid #334155',
+                  borderRadius:6, color:'#f1f5f9', fontSize:13, resize:'vertical', boxSizing:'border-box' }} />
+            ) : (
+              <p style={{ color: ficha.observacoes ? '#e2e8f0':'#475569', fontSize:13, margin:0, lineHeight:1.6 }}>
+                {ficha.observacoes || '—'}
+              </p>
+            )}
           </div>
         </div>
       )}

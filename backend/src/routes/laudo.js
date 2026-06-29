@@ -162,6 +162,24 @@ module.exports = (pool) => {
       const dataProxima = new Date();
       dataProxima.setMonth(dataProxima.getMonth() + periodoRecomendado);
 
+      // Busca fichas do plano de ação de todas as avaliações da rede
+      const { rows: fichasPlano } = await pool.query(`
+        SELECT pa.*, s.nome as setor_nome, e.nome as empresa_nome
+        FROM plano_acao pa
+        JOIN avaliacoes a ON a.id = pa.avaliacao_id
+        JOIN setores s ON s.id = a.setor_id
+        JOIN empresas e ON e.id = s.empresa_id
+        ${filtro}
+        ORDER BY pa.topico_num, e.nome, s.nome
+      `, params);
+
+      // Agrupa fichas por topico_num para o consolidado
+      const fichasConsolidadas = {};
+      fichasPlano.forEach(f => {
+        if (!fichasConsolidadas[f.topico_num]) fichasConsolidadas[f.topico_num] = [];
+        fichasConsolidadas[f.topico_num].push(f);
+      });
+
       res.json({
         avaliacao: {
           id: 'consolidado', empresa_nome: empresasNomes.join(' · '),
@@ -174,6 +192,7 @@ module.exports = (pool) => {
         resultados, contagem, top5, radarData,
         inventarioMTE, inventarioFontes, matrizAIHA,
         controles: [], glossario: GLOSSARIO,
+        fichasConsolidadas,
         periodicidade: {
           meses: periodoRecomendado,
           proxima_avaliacao: dataProxima.toISOString().slice(0,10),
