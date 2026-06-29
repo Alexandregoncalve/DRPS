@@ -4,6 +4,8 @@ import { Layout } from "../../components/Layout";
 import { Card, Btn, BadgeRisco, BarraProgresso, Alert, Input, Select } from "../../components/ui";
 import CriteriosProbabilidadeModal from "./CriteriosProbabilidadeModal";
 import Resultados from "./Resultados";
+import ColaboradoresModal from "./ColaboradoresModal";
+import ImportarColaboradoresModal from "./ImportarColaboradoresModal";
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from "recharts";
 
 const SETORES_COMUNS = [
@@ -14,7 +16,7 @@ const SETORES_COMUNS = [
 ];
 
 // ── Dashboard Gerencial do Admin — Novo Layout ───────────────────────────────
-function DashboardAdmin({ avaliacoes, onVerResultados, onNovaAvaliacao, onVerConsolidado, headers }) {
+function DashboardAdmin({ avaliacoes, onVerResultados, onNovaAvaliacao, onVerConsolidado, onAbrirColaboradores, onImportar, headers }) {
   const [carregandoLaudo, setCarregandoLaudo] = useState(false);
 
   const processadas = avaliacoes.filter(a => a.status === 'processada');
@@ -132,7 +134,10 @@ function DashboardAdmin({ avaliacoes, onVerResultados, onNovaAvaliacao, onVerCon
         <Card className="p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Avaliações individuais</p>
-            <Btn onClick={onNovaAvaliacao} className="text-xs py-1 px-2">+ Nova</Btn>
+            <div className="flex gap-1">
+              <button onClick={onImportar} className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-2 py-1 hover:bg-indigo-100">📥 Importar</button>
+              <Btn onClick={onNovaAvaliacao} className="text-xs py-1 px-2">+ Nova</Btn>
+            </div>
           </div>
           {avaliacoes.length === 0 ? (
             <p className="text-xs text-gray-400 text-center py-4">Nenhuma avaliação</p>
@@ -164,10 +169,16 @@ function DashboardAdmin({ avaliacoes, onVerResultados, onNovaAvaliacao, onVerCon
                         <p className="text-xs text-gray-400 mt-0.5">{a.respostas_coletadas||0} responderam</p>
                       </div>
                     </div>
-                    <button onClick={() => onVerResultados(a)}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium flex-shrink-0 mt-0.5">
-                      Ver →
-                    </button>
+                    <div className="flex flex-col gap-1 flex-shrink-0 mt-0.5">
+                      <button onClick={() => onVerResultados(a)}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                        Ver →
+                      </button>
+                      <button onClick={() => onAbrirColaboradores(a)}
+                        className="text-xs text-green-600 hover:text-green-800 font-medium">
+                        📱 WhatsApp
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -192,6 +203,8 @@ export default function PainelPrincipal() {
   const [avalCriada, setAvalCriada] = useState(null);
   const [resultados, setResultados] = useState(null);
   const [laudoConsolidado, setLaudoConsolidado] = useState(null);
+  const [modalColaboradores, setModalColaboradores] = useState(null);
+  const [modalImportar, setModalImportar] = useState(false); // avaliacao selecionada
   const [probabilidades, setProbabilidades] = useState({});
   const [msg, setMsg] = useState(""); const [erro, setErro] = useState("");
   const [processando, setProcessando] = useState(false);
@@ -500,6 +513,8 @@ export default function PainelPrincipal() {
               onVerResultados={verResultados}
               onNovaAvaliacao={() => setView("nova")}
               onVerConsolidado={(d) => { setLaudoConsolidado(d); setView('consolidado'); }}
+              onAbrirColaboradores={(a) => setModalColaboradores(a)}
+              onImportar={() => setModalImportar(true)}
               headers={headers}
             />
           )}
@@ -509,7 +524,10 @@ export default function PainelPrincipal() {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-medium text-gray-900 text-sm">Avaliações</h2>
-                <Btn onClick={()=>setView("nova")}>+ Nova avaliação</Btn>
+                <div className="flex gap-2">
+                  <Btn variant="secondary" onClick={()=>setModalImportar(true)}>📥 Importar</Btn>
+                  <Btn onClick={()=>setView("nova")}>+ Nova avaliação</Btn>
+                </div>
               </div>
               <div className="space-y-3">
                 {avaliacoes.length===0 ? <Card className="p-6 text-sm text-gray-400">Nenhuma avaliação.</Card>
@@ -847,6 +865,25 @@ export default function PainelPrincipal() {
             </div>
           </form>
         </Card>
+      )}
+
+      {/* MODAL COLABORADORES WHATSAPP */}
+      {modalColaboradores && (
+        <ColaboradoresModal
+          avaliacao={modalColaboradores}
+          token={token}
+          onFechar={() => setModalColaboradores(null)}
+        />
+      )}
+
+      {/* MODAL IMPORTAR COLABORADORES */}
+      {modalImportar && (
+        <ImportarColaboradoresModal
+          empresas={empresasTodas}
+          token={token}
+          onFechar={() => setModalImportar(false)}
+          onConcluido={() => { setModalImportar(false); carregarTudo(); }}
+        />
       )}
     </Layout>
   );
