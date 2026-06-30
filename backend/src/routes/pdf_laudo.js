@@ -50,7 +50,11 @@ module.exports = (pool) => {
       </div>`).join('');
 
     const assinaturaHTML = assinatura ? `
-      <div style="margin-top:30px;padding:18px 22px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
+      <div style="margin-top:20px;padding:18px 22px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">
+        <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#1e3a5f;">📋 PARECER TÉCNICO DO RESPONSÁVEL</p>
+        <p style="margin:0;font-size:12px;color:#334155;line-height:1.7;white-space:pre-line;">${assinatura.parecer_tecnico || ''}</p>
+      </div>
+      <div style="margin-top:14px;padding:18px 22px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
         <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#166534;">✅ DOCUMENTO ASSINADO ELETRONICAMENTE</p>
         <p style="margin:0;font-size:11px;color:#475569;line-height:1.6;">
           Assinado por <strong>${assinatura.nome}</strong>${assinatura.registro ? ` (${assinatura.registro})` : ''}<br/>
@@ -60,6 +64,20 @@ module.exports = (pool) => {
           <span style="color:#64748b;">Assinatura eletrônica simples nos termos da MP 2.200-2/2001 e Lei 14.063/2020.</span>
         </p>
       </div>` : '';
+
+    const disclaimerHTML = `
+      <div style="margin-top:14px;padding:16px 20px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;">
+        <p style="margin:0;font-size:10px;color:#92400e;line-height:1.7;">
+          <strong>Aviso de conformidade NR-01:</strong> este documento apresenta o diagnóstico técnico de riscos
+          psicossociais obtido por meio do instrumento COPSOQ II, em conformidade com o item 1.5.4.4.6.1 da NR-01
+          (Portaria MTE 1.419/2024). Conforme orientação do Ministério do Trabalho e Emprego, a aplicação isolada
+          de questionários não é, por si só, suficiente para comprovar a gestão dos riscos psicossociais — seus
+          resultados devem ser tecnicamente analisados e integrados ao Inventário de Riscos e ao Programa de
+          Gerenciamento de Riscos (PGR) ou à Avaliação Ergonômica Preliminar (AEP) da organização avaliada.
+          Este laudo constitui insumo técnico essencial para esse processo, devendo sua integração final ao
+          PGR/AEP ser realizada pelo responsável técnico da empresa contratante.
+        </p>
+      </div>`;
 
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
@@ -117,6 +135,8 @@ module.exports = (pool) => {
   <p style="font-size:11px;color:#94a3b8;margin-top:6px;">${periodicidade.justificativa}</p>
 
   ${assinaturaHTML}
+
+  ${disclaimerHTML}
 
   <p style="margin-top:30px;font-size:9px;color:#94a3b8;text-align:center;">
     Documento gerado pelo sistema NeXa DRPS · ${new Date().toLocaleDateString('pt-BR')}

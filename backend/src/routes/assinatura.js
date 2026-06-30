@@ -22,8 +22,20 @@ module.exports = (pool) => {
 
   // POST /api/assinatura/:avaliacao_id
   // Assinatura eletrônica simples: registra autoria com IP, timestamp e hash do conteúdo do laudo
+  // Exige Parecer Técnico do responsável — conforme orientação do MTE (maio/2026):
+  // "a aplicação isolada de questionários não é suficiente para comprovar a gestão dos
+  // riscos psicossociais. Os resultados precisam ser tecnicamente analisados."
   router.post('/:avaliacao_id', autenticar, exigirPapel('admin', 'psicologo'), async (req, res) => {
     const { avaliacao_id } = req.params;
+    const { parecer_tecnico } = req.body;
+
+    if (!parecer_tecnico || parecer_tecnico.trim().length < 50)
+      return res.status(400).json({
+        erro: 'O Parecer Técnico é obrigatório e deve ter no mínimo 50 caracteres. ' +
+              'Conforme orientação do MTE, o resultado do questionário deve ser analisado ' +
+              'tecnicamente pelo responsável, não apenas processado automaticamente.'
+      });
+
     try {
       // Busca dados do responsável técnico (usuário logado)
       const { rows: [usuario] } = await pool.query(
@@ -38,16 +50,16 @@ module.exports = (pool) => {
       );
       if (!resultados.length) return res.status(400).json({ erro: 'Avaliação sem resultados processados ainda' });
 
-      const conteudoParaHash = JSON.stringify(resultados) + avaliacao_id + new Date().toISOString();
+      const conteudoParaHash = JSON.stringify(resultados) + avaliacao_id + parecer_tecnico + new Date().toISOString();
       const hash = crypto.createHash('sha256').update(conteudoParaHash).digest('hex');
 
       const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
 
       const { rows: [assinatura] } = await pool.query(
-        `INSERT INTO assinaturas_laudo (avaliacao_id, usuario_id, nome, registro, email, ip, hash, data)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+        `INSERT INTO assinaturas_laudo (avaliacao_id, usuario_id, nome, registro, email, ip, hash, parecer_tecnico, data)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
          RETURNING *`,
-        [avaliacao_id, req.usuario.id, usuario.nome, usuario.crp || null, usuario.email, ip, hash]
+        [avaliacao_id, req.usuario.id, usuario.nome, usuario.crp || null, usuario.email, ip, hash, parecer_tecnico.trim()]
       );
 
       res.json({ ok: true, assinatura });

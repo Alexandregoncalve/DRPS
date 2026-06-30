@@ -87,7 +87,10 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
   const [assinando, setAssinando] = useState(false);
   const [baixandoPdf, setBaixandoPdf] = useState(false);
   const [modalEnvio, setModalEnvio] = useState(false);
-  const [ofereceEnvio, setOfereceEnvio] = useState(false); // mostra prompt logo após assinar // { topico_num: ficha }
+  const [ofereceEnvio, setOfereceEnvio] = useState(false); // mostra prompt logo após assinar
+  const [modalAssinar, setModalAssinar] = useState(false);
+  const [parecerTecnico, setParecerTecnico] = useState('');
+  const [erroAssinatura, setErroAssinatura] = useState('');
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
@@ -114,18 +117,27 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
   }
 
   async function assinarLaudo() {
-    if (!confirm('Confirma a assinatura eletrônica deste laudo como responsável técnico? Esta ação registra seu nome, IP e horário de forma permanente.')) return;
+    if (!parecerTecnico || parecerTecnico.trim().length < 50) {
+      setErroAssinatura('O parecer técnico deve ter no mínimo 50 caracteres.');
+      return;
+    }
     setAssinando(true);
+    setErroAssinatura('');
     try {
-      const r = await fetch(`${API}/assinatura/${avaliacaoId}`, { method: 'POST', headers });
+      const r = await fetch(`${API}/assinatura/${avaliacaoId}`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ parecer_tecnico: parecerTecnico }),
+      });
       const d = await r.json();
       if (d.ok) {
         setAssinatura(d.assinatura);
         setMsg('✅ Laudo assinado com sucesso!');
         setOfereceEnvio(true); // mostra o prompt de envio
+        setModalAssinar(false);
+        setParecerTecnico('');
       }
-      else setMsg('❌ ' + (d.erro || 'Erro ao assinar'));
-    } catch(e) { setMsg('❌ ' + e.message); }
+      else setErroAssinatura(d.erro || 'Erro ao assinar');
+    } catch(e) { setErroAssinatura(e.message); }
     setAssinando(false);
     setTimeout(() => setMsg(''), 4000);
   }
@@ -264,7 +276,7 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
                 ✅ Assinado por {assinatura.nome}
               </span>
             ) : (
-              <button onClick={assinarLaudo} disabled={assinando} style={{
+              <button onClick={() => setModalAssinar(true)} disabled={assinando} style={{
                 padding:'8px 16px', background:'#166534', border:'1px solid #166534',
                 borderRadius:8, color:'#fff', fontSize:13, cursor: assinando?'wait':'pointer', flexShrink:0,
               }}>{assinando ? '⏳ Assinando...' : '✍️ Assinar laudo'}</button>
@@ -1187,6 +1199,20 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
                     </strong>.
                   </p>
 
+                  {/* Parecer Técnico — exigido conforme orientação MTE maio/2026 */}
+                  {assinatura?.parecer_tecnico && (
+                    <div style={{ background:'#0f172a', border:'1px solid #334155', borderRadius:10,
+                      padding:'16px 20px', marginBottom:20 }}>
+                      <p style={{ color:'#93c5fd', fontSize:12, fontWeight:700, margin:'0 0 8px',
+                        letterSpacing:'0.06em', textTransform:'uppercase' }}>
+                        📋 Parecer Técnico do Responsável
+                      </p>
+                      <p style={{ color:'#cbd5e1', fontSize:13, margin:0, lineHeight:1.7, whiteSpace:'pre-line' }}>
+                        {assinatura.parecer_tecnico}
+                      </p>
+                    </div>
+                  )}
+
                   {/* Assinatura */}
                   <div style={{ borderTop:'1px solid #334155', paddingTop:20, marginTop:8 }}>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:32 }}>
@@ -1217,6 +1243,16 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
                 anonimamente. Os dados são tratados de forma agregada, em conformidade com a LGPD
                 (Lei 13.709/2018) e NR-01 (Portaria MTE 1.419/2024). O responsável técnico identificado
                 acima é o signatário deste diagnóstico.
+              </InfoBox>
+
+              <InfoBox cor="amarelo" titulo="⚠️ Aviso de conformidade NR-01">
+                Conforme orientação do Ministério do Trabalho e Emprego (maio/2026), a aplicação isolada
+                de questionários não é, por si só, suficiente para comprovar a gestão dos riscos
+                psicossociais — os resultados devem ser tecnicamente analisados e integrados ao Inventário
+                de Riscos e ao Programa de Gerenciamento de Riscos (PGR) ou à Avaliação Ergonômica
+                Preliminar (AEP) da organização avaliada (item 1.5.4.4.6.1 da NR-01). Este laudo constitui
+                insumo técnico essencial para esse processo — a integração final ao PGR/AEP da empresa
+                deve ser realizada pelo responsável técnico da organização contratante.
               </InfoBox>
             </Secao>
           </div>
@@ -1256,6 +1292,72 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
           onFechar={() => setModalConfig(false)}
           onSalvo={() => { setModalConfig(false); carregar(); }}
         />
+      )}
+
+      {/* Modal Parecer Técnico — exigido para assinatura, conforme orientação MTE maio/2026 */}
+      {modalAssinar && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.7)', display:'flex',
+          alignItems:'center', justifyContent:'center', zIndex:1000, padding:16 }}>
+          <div style={{ background:'#1e293b', border:'1px solid #334155', borderRadius:16,
+            width:'100%', maxWidth:600, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+
+            <div style={{ padding:'20px 24px 16px', borderBottom:'1px solid #334155' }}>
+              <h2 style={{ color:'#f1f5f9', fontSize:18, fontWeight:700, margin:0 }}>✍️ Assinatura do Responsável Técnico</h2>
+              <p style={{ color:'#64748b', fontSize:13, marginTop:4 }}>
+                Conforme orientação do Ministério do Trabalho e Emprego (maio/2026), a aplicação isolada
+                de questionários não comprova, por si só, a gestão dos riscos psicossociais. É necessário
+                registrar a análise técnica do responsável sobre os resultados encontrados.
+              </p>
+            </div>
+
+            <div style={{ padding:'20px 24px' }}>
+              <label style={{ color:'#94a3b8', fontSize:12, display:'block', marginBottom:6 }}>
+                Parecer Técnico <span style={{color:'#f87171'}}>*</span> — análise contextualizada dos resultados (mínimo 50 caracteres)
+              </label>
+              <textarea
+                value={parecerTecnico}
+                onChange={e => { setParecerTecnico(e.target.value); setErroAssinatura(''); }}
+                placeholder="Ex: Os resultados da avaliação foram analisados em conjunto com o histórico de afastamentos e a observação in loco realizada no setor. Os indícios de risco identificados em [dimensão] são compatíveis com [contexto observado]. Recomenda-se priorizar as ações descritas no plano de ação, com acompanhamento em [prazo]..."
+                rows={8}
+                style={{ width:'100%', padding:'12px', background:'#0f172a', border:'1px solid #334155',
+                  borderRadius:8, color:'#f1f5f9', fontSize:13, resize:'vertical', boxSizing:'border-box', lineHeight:1.6 }}
+              />
+              <p style={{ color: parecerTecnico.trim().length < 50 ? '#f87171' : '#86efac', fontSize:11, marginTop:6 }}>
+                {parecerTecnico.trim().length} / 50 caracteres mínimos
+              </p>
+
+              {erroAssinatura && (
+                <div style={{ background:'#7f1d1d22', border:'1px solid #7f1d1d', borderRadius:8,
+                  padding:'10px 14px', marginTop:12 }}>
+                  <p style={{ color:'#f87171', fontSize:13, margin:0 }}>{erroAssinatura}</p>
+                </div>
+              )}
+
+              <div style={{ background:'#0f172a', border:'1px solid #334155', borderRadius:8,
+                padding:'10px 14px', marginTop:14 }}>
+                <p style={{ color:'#64748b', fontSize:11, margin:0, lineHeight:1.6 }}>
+                  Ao assinar, você confirma que revisou tecnicamente os resultados apresentados,
+                  considerando o contexto da organização avaliada. Esta assinatura registra seu nome,
+                  CRP, IP de origem e horário de forma permanente e seguirá anexada ao laudo.
+                </p>
+              </div>
+
+              <div style={{ display:'flex', gap:10, marginTop:16 }}>
+                <button onClick={() => { setModalAssinar(false); setParecerTecnico(''); setErroAssinatura(''); }}
+                  style={{ flex:1, padding:'12px', background:'transparent', border:'1px solid #334155',
+                    borderRadius:8, color:'#94a3b8', fontSize:14, cursor:'pointer' }}>
+                  Cancelar
+                </button>
+                <button onClick={assinarLaudo} disabled={assinando || parecerTecnico.trim().length < 50}
+                  style={{ flex:2, padding:'12px', fontSize:14, fontWeight:600, borderRadius:8, border:'none',
+                    cursor: (assinando || parecerTecnico.trim().length < 50) ? 'not-allowed' : 'pointer',
+                    background: (assinando || parecerTecnico.trim().length < 50) ? '#334155' : '#166534', color:'#fff' }}>
+                  {assinando ? '⏳ Assinando...' : '✍️ Confirmar assinatura'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal Enviar Laudo */}

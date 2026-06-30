@@ -24,7 +24,7 @@ module.exports = (pool) => {
       if (req.usuario.papel === 'admin') {
         // Admin vê apenas usuários da sua organização, NUNCA superadmin
         ({ rows } = await pool.query(
-          `SELECT u.id, u.nome, u.email, u.papel, u.crp, u.criado_em,
+          `SELECT u.id, u.nome, u.email, u.papel, u.crp, u.tipo_registro, u.numero_registro, u.criado_em,
                   u.empresa_vinculada_id, u.ativo, e.nome as empresa_nome
            FROM usuarios u
            LEFT JOIN empresas e ON e.id = u.empresa_vinculada_id
@@ -36,7 +36,7 @@ module.exports = (pool) => {
       } else {
         // Psicólogo vê apenas gestores vinculados às suas empresas
         ({ rows } = await pool.query(
-          `SELECT DISTINCT u.id, u.nome, u.email, u.papel, u.crp, u.criado_em,
+          `SELECT DISTINCT u.id, u.nome, u.email, u.papel, u.crp, u.tipo_registro, u.numero_registro, u.criado_em,
                   u.empresa_vinculada_id, u.ativo, e.nome as empresa_nome
            FROM usuarios u
            JOIN empresas e ON e.id = u.empresa_vinculada_id
@@ -55,11 +55,10 @@ module.exports = (pool) => {
 
   // POST /api/usuarios
   router.post('/', autenticar, exigirPapel('admin', 'psicologo'), async (req, res) => {
-    const { nome, email, papel, crp, empresa_vinculada_id, senha, forcar_troca } = req.body;
+    const { nome, email, papel, crp, tipo_registro, numero_registro, empresa_vinculada_id, senha, forcar_troca } = req.body;
     if (!nome || !email || !papel)
       return res.status(400).json({ erro: 'Campos obrigatórios incompletos' });
 
-    // Verifica se o papel é permitido para quem está criando
     const papeisPermitidos = PAPEIS_PERMITIDOS[req.usuario.papel] || [];
     if (!papeisPermitidos.includes(papel))
       return res.status(403).json({ erro: `Sem permissão para criar usuário com perfil "${papel}"` });
@@ -68,15 +67,21 @@ module.exports = (pool) => {
     const senhaFinal = senha && senha.trim() ? senha : 'Senha@010203';
     const precisa_trocar = forcar_troca !== false;
 
+    // Deriva tipo_registro a partir do CRP se não informado explicitamente
+    const tipoFinal = tipo_registro || (crp && crp.trim() ? 'crp' : 'outro');
+    // numero_registro: usa número_registro explícito ou o crp como fallback
+    const numFinal = numero_registro || crp || null;
+
     try {
       const hash = await bcrypt.hash(senhaFinal, 10);
       const { rows } = await pool.query(
         `INSERT INTO usuarios
-           (nome, email, senha_hash, papel, crp, empresa_vinculada_id, organizacao_id, precisa_trocar_senha, ativo)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true)
-         RETURNING id, nome, email, papel, crp`,
+           (nome, email, senha_hash, papel, crp, tipo_registro, numero_registro, empresa_vinculada_id, organizacao_id, precisa_trocar_senha, ativo)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true)
+         RETURNING id, nome, email, papel, crp, tipo_registro, numero_registro`,
         [sanitize(nome), sanitize(email.toLowerCase().trim()), hash, papel,
-         sanitize(crp) || null, empresa_vinculada_id || null, organizacao_id, precisa_trocar]
+         sanitize(crp) || null, tipoFinal, sanitize(numFinal) || null,
+         empresa_vinculada_id || null, organizacao_id, precisa_trocar]
       );
       await audit(pool, 'USUARIO_CRIADO', req.usuario.id, { email, papel }, req);
       res.json(rows[0]);
@@ -89,13 +94,16 @@ module.exports = (pool) => {
 
   // PUT /api/usuarios/:id
   router.put('/:id', autenticar, exigirPapel('admin', 'psicologo'), async (req, res) => {
-    const { nome, email, papel, crp, empresa_vinculada_id, senha, forcar_troca } = req.body;
+    const { nome, email, papel, crp, tipo_registro, numero_registro, empresa_vinculada_id, senha, forcar_troca } = req.body;
     if (!nome || !email || !papel)
       return res.status(400).json({ erro: 'Campos obrigatórios incompletos' });
 
     const papeisPermitidos = PAPEIS_PERMITIDOS[req.usuario.papel] || [];
     if (!papeisPermitidos.includes(papel))
       return res.status(403).json({ erro: `Sem permissão para definir perfil "${papel}"` });
+
+    const tipoFinal = tipo_registro || (crp && crp.trim() ? 'crp' : 'outro');
+    const numFinal = numero_registro || crp || null;
 
     try {
       // Verifica se o alvo é superadmin — nunca pode ser editado
@@ -115,16 +123,20 @@ module.exports = (pool) => {
         if (!validacao.valido) return res.status(400).json({ erro: validacao.erro });
         const hash = await bcrypt.hash(senha, 10);
         query = `UPDATE usuarios SET nome=$1, email=$2, papel=$3, crp=$4,
-                   empresa_vinculada_id=$5, senha_hash=$6, precisa_trocar_senha=$7
-                 WHERE id=$8 RETURNING id, nome, email, papel, crp, ativo`;
+                   tipo_registro=$5, numero_registro=$6,
+                   empresa_vinculada_id=$7, senha_hash=$8, precisa_trocar_senha=$9
+                 WHERE id=$10 RETURNING id, nome, email, papel, crp, tipo_registro, numero_registro, ativo`;
         params = [sanitize(nome), sanitize(email.toLowerCase().trim()), papel,
-                  sanitize(crp) || null, empresa_vinculada_id || null,
+                  sanitize(crp) || null, tipoFinal, sanitize(numFinal) || null,
+                  empresa_vinculada_id || null,
                   hash, forcar_troca ? true : false, req.params.id];
       } else {
-        query = `UPDATE usuarios SET nome=$1, email=$2, papel=$3, crp=$4, empresa_vinculada_id=$5
-                 WHERE id=$6 RETURNING id, nome, email, papel, crp, ativo`;
+        query = `UPDATE usuarios SET nome=$1, email=$2, papel=$3, crp=$4,
+                   tipo_registro=$5, numero_registro=$6, empresa_vinculada_id=$7
+                 WHERE id=$8 RETURNING id, nome, email, papel, crp, tipo_registro, numero_registro, ativo`;
         params = [sanitize(nome), sanitize(email.toLowerCase().trim()), papel,
-                  sanitize(crp) || null, empresa_vinculada_id || null, req.params.id];
+                  sanitize(crp) || null, tipoFinal, sanitize(numFinal) || null,
+                  empresa_vinculada_id || null, req.params.id];
       }
 
       const { rows } = await pool.query(query, params);

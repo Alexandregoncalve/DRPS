@@ -5,6 +5,7 @@ import { Card, Btn, BadgeRisco, BarraProgresso, Alert, Input, Select } from "../
 import CriteriosProbabilidadeModal from "./CriteriosProbabilidadeModal";
 import Resultados from "./Resultados";
 import ColaboradoresModal from "./ColaboradoresModal";
+import Financeiro from "./Financeiro";
 import ImportarColaboradoresModal from "./ImportarColaboradoresModal";
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from "recharts";
 
@@ -223,7 +224,7 @@ export default function PainelPrincipal() {
   const [novoSetor, setNovoSetor] = useState({ nome:"", total_funcionarios:"" });
   const [adicionandoSetor, setAdicionandoSetor] = useState(false);
   const [novaAval, setNovaAval] = useState({ empresa_id:"", setor_id:"", data_fim:"" });
-  const [novoUsr, setNovoUsr] = useState({ nome:"", email:"", senha:"", papel:"gestor_matriz", crp:"", empresa_vinculada_id:"", forcar_troca:true });
+  const [novoUsr, setNovoUsr] = useState({ nome:"", email:"", senha:"", papel:"gestor_matriz", crp:"", tipo_registro:"crp", numero_registro:"", empresa_vinculada_id:"", forcar_troca:true });
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [empresaSel, setEmpresaSel] = useState(null);
   const [usuarioEditando, setUsuarioEditando] = useState(null);
@@ -293,7 +294,7 @@ export default function PainelPrincipal() {
     const d = await r.json();
     if (!r.ok) { setErro(d.erro); return; }
     setMsg(`✅ Usuário "${novoUsr.nome}" criado!`);
-    setNovoUsr({nome:"",email:"",senha:"",papel:"gestor_matriz",crp:"",empresa_vinculada_id:"",forcar_troca:true});
+    setNovoUsr({nome:"",email:"",senha:"",papel:"gestor_matriz",crp:"",tipo_registro:"crp",numero_registro:"",empresa_vinculada_id:"",forcar_troca:true});
     carregarTudo(); setView("usuarios");
   }
 
@@ -303,7 +304,7 @@ export default function PainelPrincipal() {
     const d = await r.json();
     if (!r.ok) { setErro(d.erro); return; }
     setMsg(`✅ Usuário "${novoUsr.nome}" atualizado!`);
-    setNovoUsr({nome:"",email:"",senha:"",papel:"gestor_matriz",crp:"",empresa_vinculada_id:""});
+    setNovoUsr({nome:"",email:"",senha:"",papel:"gestor_matriz",crp:"",tipo_registro:"crp",numero_registro:"",empresa_vinculada_id:""});
     setUsuarioEditando(null);
     carregarTudo(); setView("usuarios");
   }
@@ -514,6 +515,7 @@ export default function PainelPrincipal() {
           <Btn variant={view==="avaliacoes"?"primary":"secondary"} onClick={()=>setView("avaliacoes")}>Avaliações</Btn>
           <Btn variant={view==="empresas"?"primary":"secondary"} onClick={()=>setView("empresas")}>Empresas</Btn>
           {isAdmin && <Btn variant={view==="usuarios"?"primary":"secondary"} onClick={()=>setView("usuarios")}>Usuários</Btn>}
+          {isAdmin && <Btn variant={view==="financeiro"?"primary":"secondary"} onClick={()=>setView("financeiro")}>💰 Financeiro</Btn>}
         </div>
       }>
 
@@ -744,7 +746,7 @@ export default function PainelPrincipal() {
                         {u.ativo!==false && (
                           <Btn variant="ghost" className="text-xs" onClick={()=>{
                             setUsuarioEditando(u);
-                            setNovoUsr({nome:u.nome,email:u.email,senha:"",papel:u.papel,crp:u.crp||"",empresa_vinculada_id:u.empresa_vinculada_id||"",forcar_troca:false});
+                            setNovoUsr({nome:u.nome,email:u.email,senha:"",papel:u.papel,crp:u.crp||"",tipo_registro:u.tipo_registro||"crp",numero_registro:u.numero_registro||"",empresa_vinculada_id:u.empresa_vinculada_id||"",forcar_troca:false});
                             setView("editar_usuario");
                           }}>Editar</Btn>
                         )}
@@ -836,7 +838,53 @@ export default function PainelPrincipal() {
                 ))}
               </Select>
             )}
-            <Input label={novoUsr.papel==="psicologo" ? "CRP *" : "CRP (opcional)"} placeholder="CRP 00/000000" value={novoUsr.crp} onChange={e=>setNovoUsr({...novoUsr,crp:e.target.value})}/>
+
+            {/* Perfil profissional — define o tipo de documento automaticamente */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Tipo de registro profissional *
+                <span className="ml-1 text-gray-400 font-normal">(define o tipo de laudo automaticamente)</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                {[
+                  { value:"crp",   label:"🧠 Psicólogo — CRP",           placeholder:"CRP 00/000000" },
+                  { value:"crea",  label:"⚙️ Eng. Segurança — CREA",      placeholder:"CREA 00000-D/UF" },
+                  { value:"cft",   label:"🦺 Técnico SST — CFT",          placeholder:"CFT 000000" },
+                  { value:"crm",   label:"🏥 Médico do Trabalho — CRM",   placeholder:"CRM UF 000000" },
+                  { value:"rh",    label:"👥 Profissional de RH",         placeholder:"Registro (opcional)" },
+                  { value:"outro", label:"📋 Outro habilitado",            placeholder:"Registro (opcional)" },
+                ].map(op => (
+                  <label key={op.value} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs transition-colors ${novoUsr.tipo_registro===op.value ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}>
+                    <input type="radio" name="tipo_registro_novo" value={op.value}
+                      checked={novoUsr.tipo_registro===op.value}
+                      onChange={() => setNovoUsr({...novoUsr, tipo_registro:op.value, crp: op.value==="crp" ? novoUsr.crp : ""})}
+                      className="hidden" />
+                    {op.label}
+                  </label>
+                ))}
+              </div>
+              <input
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mt-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder={[
+                  { value:"crp",   placeholder:"CRP 00/000000" },
+                  { value:"crea",  placeholder:"CREA 00000-D/UF" },
+                  { value:"cft",   placeholder:"CFT 000000" },
+                  { value:"crm",   placeholder:"CRM UF 000000" },
+                  { value:"rh",    placeholder:"Número de registro (opcional)" },
+                  { value:"outro", placeholder:"Número de registro (opcional)" },
+                ].find(o=>o.value===novoUsr.tipo_registro)?.placeholder || "Número de registro"}
+                value={novoUsr.tipo_registro==="crp" ? novoUsr.crp : novoUsr.numero_registro}
+                onChange={e => novoUsr.tipo_registro==="crp"
+                  ? setNovoUsr({...novoUsr, crp:e.target.value, numero_registro:e.target.value})
+                  : setNovoUsr({...novoUsr, numero_registro:e.target.value})}
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                {novoUsr.tipo_registro==="crp" && "→ Laudo será: Relatório Técnico Psicológico (padrão CFP 06/2019)"}
+                {["crea","cft","crm"].includes(novoUsr.tipo_registro) && "→ Laudo será: Relatório Técnico de Avaliação de Riscos Psicossociais"}
+                {novoUsr.tipo_registro==="rh" && "→ Laudo será: Relatório de Diagnóstico de Fatores de Risco Psicossociais"}
+                {novoUsr.tipo_registro==="outro" && "→ Laudo será: Diagnóstico de Riscos Psicossociais (DRPS)"}
+              </p>
+            </div>
             <div className="flex gap-2 pt-1">
               <Btn type="submit">Criar usuário</Btn>
               <Btn variant="secondary" onClick={()=>setView("usuarios")}>Cancelar</Btn>
@@ -876,12 +924,49 @@ export default function PainelPrincipal() {
               </Select>
             )}
             <Input label="CRP (opcional)" placeholder="CRP 00/000000" value={novoUsr.crp} onChange={e=>setNovoUsr({...novoUsr,crp:e.target.value})}/>
+
+            {/* Perfil profissional */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Tipo de registro profissional
+                <span className="ml-1 text-gray-400 font-normal">(define o tipo de laudo automaticamente)</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                {[
+                  { value:"crp",   label:"🧠 Psicólogo — CRP" },
+                  { value:"crea",  label:"⚙️ Eng. Segurança — CREA" },
+                  { value:"cft",   label:"🦺 Técnico SST — CFT" },
+                  { value:"crm",   label:"🏥 Médico do Trabalho — CRM" },
+                  { value:"rh",    label:"👥 Profissional de RH" },
+                  { value:"outro", label:"📋 Outro habilitado" },
+                ].map(op => (
+                  <label key={op.value} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs transition-colors ${novoUsr.tipo_registro===op.value ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}>
+                    <input type="radio" name="tipo_registro_edit" value={op.value}
+                      checked={novoUsr.tipo_registro===op.value}
+                      onChange={() => setNovoUsr({...novoUsr, tipo_registro:op.value})}
+                      className="hidden" />
+                    {op.label}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 mt-2">
+                {novoUsr.tipo_registro==="crp" && "→ Laudo: Relatório Técnico Psicológico (padrão CFP 06/2019)"}
+                {["crea","cft","crm"].includes(novoUsr.tipo_registro) && "→ Laudo: Relatório Técnico de Avaliação de Riscos Psicossociais"}
+                {novoUsr.tipo_registro==="rh" && "→ Laudo: Relatório de Diagnóstico de Fatores de Risco Psicossociais"}
+                {novoUsr.tipo_registro==="outro" && "→ Laudo: Diagnóstico de Riscos Psicossociais (DRPS)"}
+              </p>
+            </div>
             <div className="flex gap-2 pt-1">
               <Btn type="submit">Salvar alterações</Btn>
-              <Btn variant="secondary" onClick={()=>{ setUsuarioEditando(null); setNovoUsr({nome:"",email:"",senha:"",papel:"gestor_matriz",crp:"",empresa_vinculada_id:""}); setView("usuarios"); }}>Cancelar</Btn>
+              <Btn variant="secondary" onClick={()=>{ setUsuarioEditando(null); setNovoUsr({nome:"",email:"",senha:"",papel:"gestor_matriz",crp:"",tipo_registro:"crp",numero_registro:"",empresa_vinculada_id:""}); setView("usuarios"); }}>Cancelar</Btn>
             </div>
           </form>
         </Card>
+      )}
+
+      {/* FINANCEIRO */}
+      {view==="financeiro" && isAdmin && (
+        <Financeiro token={token} />
       )}
 
       {/* MODAL COLABORADORES WHATSAPP */}

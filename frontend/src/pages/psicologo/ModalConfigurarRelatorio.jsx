@@ -114,6 +114,12 @@ export default function ModalConfigurarRelatorio({ avaliacao, token, onFechar, o
         titulo_tecnico:        config.titulo_tecnico || "DRPS",
         titulo_personalizado:  config.titulo_personalizado || "",
         incluir_plano_acao:    config.incluir_plano_acao ?? true,
+        // Conformidade NR-01
+        pgr_referencia:        config.pgr_referencia || "",
+        aep_referencia:        config.aep_referencia || "",
+        fontes_complementares: config.fontes_complementares || [],
+        fontes_obs:            config.fontes_complementares_obs || "",
+        tipo_documento:        config.tipo_documento || "auto",
       });
 
       // Monta mapa de controles marcados
@@ -210,11 +216,12 @@ export default function ModalConfigurarRelatorio({ avaliacao, token, onFechar, o
   );
 
   const ABAS = [
-    { id: "empresa",     label: "📋 Empresa" },
-    { id: "responsavel", label: "👤 Responsável" },
-    { id: "indicadores", label: "📊 Indicadores" },
-    { id: "layout",      label: "🎨 Layout" },
-    { id: "controles",   label: "✅ Controles" },
+    { id: "empresa",       label: "📋 Empresa" },
+    { id: "responsavel",   label: "👤 Responsável" },
+    { id: "indicadores",   label: "📊 Indicadores" },
+    { id: "layout",        label: "🎨 Layout" },
+    { id: "controles",     label: "✅ Controles" },
+    { id: "conformidade",  label: "📎 Conformidade NR-01" },
   ];
 
   return (
@@ -518,6 +525,127 @@ export default function ModalConfigurarRelatorio({ avaliacao, token, onFechar, o
               </div>
             </div>
           )}
+          {/* ABA: CONFORMIDADE NR-01 */}
+          {aba === "conformidade" && (
+            <div style={estilos.secao}>
+              <p style={estilos.hint}>
+                Campos obrigatórios para conformidade com a NR-01 (Portaria MTE 1.419/2024).
+                Conforme orientação do MTE (maio/2026), o diagnóstico deve ser integrado ao PGR/AEP
+                da empresa e complementado por outras fontes além do questionário.
+              </p>
+
+              {/* Tipo de documento */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={estilos.label}>Tipo de documento (adapta título e linguagem do laudo)</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+                  {[
+                    { value: "auto",       label: "🤖 Automático — definido pelo perfil do usuário logado" },
+                    { value: "psicologo",  label: "🧠 Relatório Técnico Psicológico (Psicólogo — CRP) — padrão CFP 06/2019" },
+                    { value: "sst",        label: "⚙️ Relatório Técnico de Avaliação de Riscos Psicossociais (Técnico SST / Eng.)" },
+                    { value: "rh",         label: "👥 Relatório de Diagnóstico de Fatores de Risco Psicossociais (RH / Gestor)" },
+                    { value: "aep",        label: "📐 Avaliação Ergonômica Preliminar — Fatores Psicossociais (AEP-FRP)" },
+                  ].map(op => (
+                    <label key={op.value} style={{ display: "flex", alignItems: "center", gap: 10,
+                      padding: "10px 12px", borderRadius: 8, cursor: "pointer",
+                      border: `1px solid ${form.tipo_documento === op.value ? "#4f46e5" : "#334155"}`,
+                      background: form.tipo_documento === op.value ? "#4f46e522" : "#0f172a" }}>
+                      <input type="radio" name="tipo_documento" value={op.value}
+                        checked={form.tipo_documento === op.value}
+                        onChange={() => upd("tipo_documento", op.value)} />
+                      <span style={{ color: form.tipo_documento === op.value ? "#a5b4fc" : "#94a3b8", fontSize: 13 }}>
+                        {op.label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Vínculo PGR/AEP */}
+              <div style={{ ...estilos.blocoDestaque, borderColor: "#1e3a5f" }}>
+                <p style={{ color: "#93c5fd", fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+                  📁 Vínculo com PGR/AEP da Empresa
+                </p>
+                <p style={{ color: "#64748b", fontSize: 12, marginBottom: 14, lineHeight: 1.6 }}>
+                  Conforme NR-01 item 1.5.4.4.6.1, os resultados devem ser integrados ao Programa de
+                  Gerenciamento de Riscos (PGR) ou à Avaliação Ergonômica Preliminar (AEP) da empresa.
+                  Informe a referência do documento mestre onde este diagnóstico será integrado.
+                </p>
+                <Campo label="Referência do PGR (número, data ou identificador)"
+                  placeholder="Ex: PGR-2026-001 / Revisão 02 / Março 2026"
+                  value={form.pgr_referencia} onChange={v => upd("pgr_referencia", v)} />
+                <Campo label="Referência da AEP (se aplicável)"
+                  placeholder="Ex: AEP-Setor-Administrativo-2026"
+                  value={form.aep_referencia} onChange={v => upd("aep_referencia", v)} />
+                {!form.pgr_referencia && !form.aep_referencia && (
+                  <p style={{ color: "#f87171", fontSize: 12, marginTop: 4 }}>
+                    ⚠️ Recomendado preencher ao menos um — aumenta a validade do documento perante o MTE.
+                  </p>
+                )}
+              </div>
+
+              {/* Fontes complementares */}
+              <div style={{ ...estilos.blocoDestaque, borderColor: "#1e3a5f" }}>
+                <p style={{ color: "#93c5fd", fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                  🔍 Fontes Complementares de Evidência
+                </p>
+                <p style={{ color: "#64748b", fontSize: 12, marginBottom: 14, lineHeight: 1.6 }}>
+                  O MTE orienta que o diagnóstico não se baseie apenas no questionário. Marque as
+                  demais fontes utilizadas nesta avaliação.
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+                  {[
+                    { value: "entrevistas",      label: "🎤 Entrevistas com colaboradores" },
+                    { value: "grupos_focais",    label: "👥 Grupos focais / dinâmicas" },
+                    { value: "observacao_local", label: "👁️ Observação in loco" },
+                    { value: "dados_absenteismo",label: "📉 Dados de absenteísmo" },
+                    { value: "dados_afastamento",label: "🏥 Dados de afastamentos (CID F)" },
+                    { value: "dados_turnover",   label: "🔄 Dados de turnover" },
+                    { value: "pcmso",            label: "📋 Relatório do PCMSO" },
+                    { value: "nr17_aet",         label: "⚖️ AET — Análise Ergonômica do Trabalho" },
+                    { value: "cipa",             label: "🦺 Registros da CIPA" },
+                    { value: "esocial",          label: "💻 Dados do eSocial" },
+                  ].map(fonte => {
+                    const marcado = (form.fontes_complementares || []).includes(fonte.value);
+                    return (
+                      <label key={fonte.value} style={{ display: "flex", alignItems: "center", gap: 8,
+                        padding: "8px 10px", borderRadius: 8, cursor: "pointer",
+                        border: `1px solid ${marcado ? "#1d4ed8" : "#334155"}`,
+                        background: marcado ? "#1d4ed822" : "#0f172a" }}>
+                        <input type="checkbox" checked={marcado}
+                          onChange={() => {
+                            const atual = form.fontes_complementares || [];
+                            upd("fontes_complementares", marcado
+                              ? atual.filter(f => f !== fonte.value)
+                              : [...atual, fonte.value]);
+                          }} />
+                        <span style={{ color: marcado ? "#93c5fd" : "#94a3b8", fontSize: 12 }}>
+                          {fonte.label}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div style={{ marginBottom: 0 }}>
+                  <label style={estilos.label}>Outras fontes / observações adicionais</label>
+                  <textarea value={form.fontes_obs}
+                    onChange={e => upd("fontes_obs", e.target.value)}
+                    placeholder="Ex: Análise de registros de ocorrências de RH do último semestre, entrevistas com lideranças..."
+                    rows={3} style={{ ...estilos.input, resize: "vertical" }} />
+                </div>
+              </div>
+
+              {/* Aviso final */}
+              <div style={{ background: "#14532d22", border: "1px solid #14532d66",
+                borderRadius: 10, padding: "12px 16px" }}>
+                <p style={{ color: "#86efac", fontSize: 12, margin: 0, lineHeight: 1.7 }}>
+                  ✅ Com PGR/AEP referenciado e ao menos uma fonte complementar marcada, este laudo
+                  atende plenamente às exigências do item 1.5.4.4.6.1 da NR-01 e à orientação do MTE
+                  publicada em maio/2026 sobre gestão de riscos psicossociais.
+                </p>
+              </div>
+            </div>
+          )}
+
         </div>
 
         {/* Rodapé */}
