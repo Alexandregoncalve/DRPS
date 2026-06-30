@@ -67,6 +67,7 @@ const ESCALA = [
 
 export default function Formulario({ token }) {
   const [avaliacao, setAvaliacao] = useState(null);
+  const [tokenAvaliacao, setTokenAvaliacao] = useState(token); // token real para o POST
   const [respostas, setRespostas] = useState({});
   const [enviado, setEnviado] = useState(false);
   const [erro, setErro] = useState("");
@@ -77,9 +78,14 @@ export default function Formulario({ token }) {
 
   useEffect(() => {
     fetch(`${API}/responder/${token}`).then(r=>r.json()).then(d=>{
-      if (d.erro === 'jaRespondido') { setJaRespondeu(true); setAvaliacao({}); }
+      if (d.erro === 'jaRespondido') { setJaRespondeu(true); }
+      else if (d.erro === 'linkExpirado') { setErro(d.mensagem || 'Link expirado.'); }
       else if (d.erro) setErro(d.mensagem || d.erro);
-      else setAvaliacao(d);
+      else {
+        setAvaliacao(d);
+        // Se o GET retornou token_anonimo real, usa ele no POST
+        if (d._token_original) setTokenAvaliacao(d._token_original);
+      }
     });
   }, [token]);
 
@@ -118,7 +124,7 @@ export default function Formulario({ token }) {
     }
   }
 
-  // ---- JÁ RESPONDEU ----
+  // ---- JÁ RESPONDEU — deve vir ANTES do carregando ----
   if (jaRespondeu) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
@@ -127,9 +133,13 @@ export default function Formulario({ token }) {
         <p className="text-base text-gray-600 mb-4 leading-relaxed">
           Suas respostas já foram registradas com sucesso. Obrigado pela sua participação!
         </p>
-        <p className="text-sm text-gray-400 bg-gray-50 rounded-xl py-3 px-4">
-          Você pode fechar esta aba agora.
+        <p className="text-sm text-gray-400 bg-gray-50 rounded-xl py-3 px-4 mb-4">
+          Se você compartilha este aparelho com um colega, peça para ele usar o próprio aparelho.
         </p>
+        <button onClick={() => window.close()}
+          className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold text-base hover:bg-blue-700">
+          Fechar esta aba
+        </button>
       </div>
     </div>
   );
@@ -267,10 +277,10 @@ export default function Formulario({ token }) {
                 {p.texto}
                 {naoResp && <span className="ml-1 text-sm text-red-500 font-normal">* obrigatória</span>}
               </p>
-              <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+              <div className="grid grid-cols-5 gap-1 sm:gap-2">
                 {ESCALA.map(op=>(
                   <label key={op.valor}
-                    className={`cursor-pointer rounded-xl border-2 text-center py-3 px-1 transition-all select-none
+                    className={`cursor-pointer rounded-xl border-2 text-center py-3 px-0.5 transition-all select-none
                       ${respostas[p.num]==op.valor
                         ? "border-blue-500 bg-blue-500 text-white font-bold shadow-sm"
                         : "border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50"
@@ -278,8 +288,8 @@ export default function Formulario({ token }) {
                     <input type="radio" name={`p${p.num}`} value={op.valor}
                       onChange={()=>{ setRespostas({...respostas,[p.num]:op.valor}); if(erroEnvio) setErroEnvio(""); }}
                       className="sr-only"/>
-                    <span className="block text-lg font-bold">{op.valor}</span>
-                    <span className="text-xs leading-tight">{op.label}</span>
+                    <span className="block text-base sm:text-lg font-bold">{op.valor}</span>
+                    <span className="text-[9px] sm:text-xs leading-tight block truncate px-0.5">{op.label}</span>
                   </label>
                 ))}
               </div>

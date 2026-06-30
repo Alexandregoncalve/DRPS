@@ -16,7 +16,7 @@ const SETORES_COMUNS = [
 ];
 
 // ── Dashboard Gerencial do Admin — Novo Layout ───────────────────────────────
-function DashboardAdmin({ avaliacoes, onVerResultados, onNovaAvaliacao, onVerConsolidado, onAbrirColaboradores, onImportar, headers }) {
+function DashboardAdmin({ avaliacoes, onVerResultados, onNovaAvaliacao, onVerConsolidado, onAbrirColaboradores, onImportar, onReprocessar, headers }) {
   const [carregandoLaudo, setCarregandoLaudo] = useState(false);
 
   const processadas = avaliacoes.filter(a => a.status === 'processada');
@@ -178,6 +178,12 @@ function DashboardAdmin({ avaliacoes, onVerResultados, onNovaAvaliacao, onVerCon
                         className="text-xs text-green-600 hover:text-green-800 font-medium">
                         📱 WhatsApp
                       </button>
+                      {(a.respostas_coletadas > 0) && (
+                        <button onClick={() => onReprocessar(a)}
+                          className="text-xs text-amber-600 hover:text-amber-800 font-medium">
+                          🔄 Processar
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -300,6 +306,16 @@ export default function PainelPrincipal() {
     setNovoUsr({nome:"",email:"",senha:"",papel:"gestor_matriz",crp:"",empresa_vinculada_id:""});
     setUsuarioEditando(null);
     carregarTudo(); setView("usuarios");
+  }
+
+  async function reprocessar(aval) {
+    if (!confirm(`Reprocessar avaliação de ${aval.empresa_nome} · ${aval.setor_nome}?`)) return;
+    try {
+      const r = await fetch(`${API}/avaliacoes/${aval.id}/processar`, { method:'POST', headers });
+      if (r.ok) { setMsg('✅ Processado com sucesso!'); carregarTudo(); }
+      else setErro('Erro ao processar. Verifique se há respostas.');
+    } catch(e) { setErro(e.message); }
+    setTimeout(() => { setMsg(''); setErro(''); }, 3000);
   }
 
   async function verResultados(aval) {
@@ -515,6 +531,7 @@ export default function PainelPrincipal() {
               onVerConsolidado={(d) => { setLaudoConsolidado(d); setView('consolidado'); }}
               onAbrirColaboradores={(a) => setModalColaboradores(a)}
               onImportar={() => setModalImportar(true)}
+              onReprocessar={reprocessar}
               headers={headers}
             />
           )}

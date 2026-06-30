@@ -17,6 +17,8 @@ function autenticar(req, res, next) {
 
 function exigirPapel(...papeis) {
   return (req, res, next) => {
+    // Superadmin tem acesso a tudo
+    if (req.usuario.papel === 'superadmin') return next();
     if (!papeis.includes(req.usuario.papel))
       return res.status(403).json({ erro: 'Acesso não autorizado' });
     next();
