@@ -215,7 +215,7 @@ module.exports = (pool) => {
       // 1. Dados da avaliação
       const { rows: [aval] } = await pool.query(`
         SELECT a.*, s.nome AS setor_nome, s.total_funcionarios AS setor_total,
-               e.nome AS empresa_nome, e.cnpj AS empresa_cnpj,
+               e.id AS empresa_id, e.nome AS empresa_nome, e.cnpj AS empresa_cnpj,
                u.nome AS psicologo_nome, u.crp AS psicologo_crp, u.email AS psicologo_email
         FROM avaliacoes a
         JOIN setores  s ON s.id = a.setor_id

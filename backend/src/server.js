@@ -95,6 +95,7 @@ app.use('/api/colaboradores', require('./routes/colaboradores')(pool));
 app.use('/api/importar',      require('./routes/importar')(pool));
 app.use('/api/pdf',           require('./routes/pdf_laudo')(pool));
 app.use('/api/assinatura',    require('./routes/assinatura')(pool));
+app.use('/api/envio-laudo',   require('./routes/envio_laudo')(pool));
 
 // ── Rotas Super Admin ─────────────────────────────────────────────────────────
 app.use('/api/superadmin/auth',       limiterLogin, require('./routes/superadmin/auth')(pool));

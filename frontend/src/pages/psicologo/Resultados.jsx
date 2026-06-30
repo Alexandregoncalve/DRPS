@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import ModalConfigurarRelatorio from "./ModalConfigurarRelatorio";
+import EnvioLaudoModal from "./EnvioLaudoModal";
 import { API } from "../../contexts/AuthContext";
 import {
   RadarChart, PolarGrid, PolarAngleAxis, Radar,
@@ -84,7 +85,9 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
   const [fichasPlano, setFichasPlano] = useState({});
   const [assinatura, setAssinatura] = useState(null);
   const [assinando, setAssinando] = useState(false);
-  const [baixandoPdf, setBaixandoPdf] = useState(false); // { topico_num: ficha }
+  const [baixandoPdf, setBaixandoPdf] = useState(false);
+  const [modalEnvio, setModalEnvio] = useState(false);
+  const [ofereceEnvio, setOfereceEnvio] = useState(false); // mostra prompt logo após assinar // { topico_num: ficha }
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
@@ -116,7 +119,11 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
     try {
       const r = await fetch(`${API}/assinatura/${avaliacaoId}`, { method: 'POST', headers });
       const d = await r.json();
-      if (d.ok) { setAssinatura(d.assinatura); setMsg('✅ Laudo assinado com sucesso!'); }
+      if (d.ok) {
+        setAssinatura(d.assinatura);
+        setMsg('✅ Laudo assinado com sucesso!');
+        setOfereceEnvio(true); // mostra o prompt de envio
+      }
       else setMsg('❌ ' + (d.erro || 'Erro ao assinar'));
     } catch(e) { setMsg('❌ ' + e.message); }
     setAssinando(false);
@@ -264,6 +271,13 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
             )
           )}
 
+          {avaliacaoId !== 'consolidado' && assinatura && (
+            <button onClick={() => setModalEnvio(true)} style={{
+              padding:'8px 16px', background:'#4f46e5', border:'1px solid #4f46e5',
+              borderRadius:8, color:'#fff', fontSize:13, cursor:'pointer', flexShrink:0,
+            }}>📤 Enviar laudo</button>
+          )}
+
           <button onClick={baixarPDF} disabled={baixandoPdf} style={{
             padding:'8px 16px', background:'#1e3a5f', border:'1px solid #1e3a5f',
             borderRadius:8, color:'#fff', fontSize:13, cursor: baixandoPdf?'wait':'pointer', flexShrink:0,
@@ -277,6 +291,31 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
           )}
         </div>
       </div>
+
+      {/* PROMPT PÓS-ASSINATURA — pergunta se quer enviar agora */}
+      {ofereceEnvio && !modalEnvio && (
+        <div style={{ maxWidth:1100, margin:'0 auto', padding:'0 24px' }}>
+          <div style={{ background:'#0f172a', border:'1px solid #4f46e5', borderRadius:10,
+            padding:'14px 20px', marginBottom:16, display:'flex', alignItems:'center',
+            justifyContent:'space-between', gap:16 }}>
+            <p style={{ color:'#a5b4fc', fontSize:13, margin:0 }}>
+              ✍️ Laudo assinado! Deseja enviar agora ao responsável da empresa?
+            </p>
+            <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+              <button onClick={() => { setModalEnvio(true); setOfereceEnvio(false); }}
+                style={{ padding:'6px 14px', background:'#4f46e5', border:'none', borderRadius:6,
+                  color:'#fff', fontSize:12, cursor:'pointer' }}>
+                📤 Enviar agora
+              </button>
+              <button onClick={() => setOfereceEnvio(false)}
+                style={{ padding:'6px 14px', background:'transparent', border:'1px solid #334155',
+                  borderRadius:6, color:'#94a3b8', fontSize:12, cursor:'pointer' }}>
+                Depois
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Abas */}
       <div style={{ background: '#1e293b', borderBottom: '1px solid #334155',
@@ -1216,6 +1255,19 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
           token={token}
           onFechar={() => setModalConfig(false)}
           onSalvo={() => { setModalConfig(false); carregar(); }}
+        />
+      )}
+
+      {/* Modal Enviar Laudo */}
+      {modalEnvio && (
+        <EnvioLaudoModal
+          avaliacaoId={avaliacaoId}
+          empresaId={dados?.avaliacao?.empresa_id}
+          empresaNome={dados?.avaliacao?.empresa_nome}
+          setorNome={dados?.avaliacao?.setor_nome}
+          token={token}
+          onFechar={() => setModalEnvio(false)}
+          onEnviado={() => setMsg('✅ Laudo enviado com sucesso!')}
         />
       )}
     </div>
