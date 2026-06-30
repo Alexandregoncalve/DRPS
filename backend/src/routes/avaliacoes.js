@@ -5,7 +5,7 @@ const { rateLimit } = require('../middleware/rateLimit');
 const { audit } = require('../middleware/auditoria');
 const { sanitize } = require('../middleware/crypto');
 const { calcularResultados } = require('../calculo');
-const { CRITERIOS_PROBABILIDADE, calcularSugestaoProbabilidade } = require('../criteriosProbabilidade');
+const { CRITERIOS_PROBABILIDADE, calcularSugestaoProbabilidade } = require('../criterios_probabilidade');
 
 module.exports = (pool) => {
   const router = express.Router();

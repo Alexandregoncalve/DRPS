@@ -81,7 +81,10 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
   const [salvando,  setSalvando]  = useState(false);
   const [msg,       setMsg]       = useState('');
   const [modalConfig, setModalConfig] = useState(false);
-  const [fichasPlano, setFichasPlano] = useState({}); // { topico_num: ficha }
+  const [fichasPlano, setFichasPlano] = useState({});
+  const [assinatura, setAssinatura] = useState(null);
+  const [assinando, setAssinando] = useState(false);
+  const [baixandoPdf, setBaixandoPdf] = useState(false); // { topico_num: ficha }
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
@@ -96,6 +99,49 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
       fichas.forEach(f => { mapa[f.topico_num] = f; });
       setFichasPlano(mapa);
     } catch(e) {}
+  }
+
+  async function carregarAssinatura() {
+    if (avaliacaoId === 'consolidado') return;
+    try {
+      const r = await fetch(`${API}/assinatura/${avaliacaoId}`, { headers });
+      const d = await r.json();
+      setAssinatura(d || null);
+    } catch(e) {}
+  }
+
+  async function assinarLaudo() {
+    if (!confirm('Confirma a assinatura eletrônica deste laudo como responsável técnico? Esta ação registra seu nome, IP e horário de forma permanente.')) return;
+    setAssinando(true);
+    try {
+      const r = await fetch(`${API}/assinatura/${avaliacaoId}`, { method: 'POST', headers });
+      const d = await r.json();
+      if (d.ok) { setAssinatura(d.assinatura); setMsg('✅ Laudo assinado com sucesso!'); }
+      else setMsg('❌ ' + (d.erro || 'Erro ao assinar'));
+    } catch(e) { setMsg('❌ ' + e.message); }
+    setAssinando(false);
+    setTimeout(() => setMsg(''), 4000);
+  }
+
+  async function baixarPDF() {
+    setBaixandoPdf(true);
+    try {
+      const r = await fetch(`${API}/pdf/laudo/${avaliacaoId}`, { headers });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.erro); }
+      const blob = await r.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `laudo-drps-${avaliacao?.empresa_nome || avaliacaoId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch(e) {
+      setMsg('❌ Erro ao gerar PDF: ' + e.message);
+      setTimeout(() => setMsg(''), 4000);
+    }
+    setBaixandoPdf(false);
   }
 
   async function carregar() {
@@ -113,6 +159,7 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
       d.resultados.forEach(r => { p[r.topico_num] = r.media_probabilidade || 2; });
       setProbLocal(p);
       carregarFichas();
+      carregarAssinatura();
     } catch (e) { setErro(e.message); }
     finally { setLoading(false); }
   }
@@ -201,12 +248,34 @@ export default function Resultados({ avaliacaoId, token, onVoltar }) {
           </p>
         </div>
         {msg && <span style={{ fontSize: 13, color: msg.startsWith('✅') ? '#86efac' : '#f87171' }}>{msg}</span>}
-        {avaliacaoId !== 'consolidado' && (
-          <button onClick={() => setModalConfig(true)} style={{
-            padding: '8px 16px', background: '#334155', border: '1px solid #475569',
-            borderRadius: 8, color: '#e2e8f0', fontSize: 13, cursor: 'pointer', flexShrink: 0,
-          }}>⚙️ Configurar relatório</button>
-        )}
+
+        <div style={{ display:'flex', gap:8, flexShrink:0, alignItems:'center' }}>
+          {avaliacaoId !== 'consolidado' && (
+            assinatura ? (
+              <span style={{ display:'flex', alignItems:'center', gap:6, background:'#14532d22',
+                border:'1px solid #14532d66', borderRadius:8, padding:'7px 14px', fontSize:12, color:'#86efac' }}>
+                ✅ Assinado por {assinatura.nome}
+              </span>
+            ) : (
+              <button onClick={assinarLaudo} disabled={assinando} style={{
+                padding:'8px 16px', background:'#166534', border:'1px solid #166534',
+                borderRadius:8, color:'#fff', fontSize:13, cursor: assinando?'wait':'pointer', flexShrink:0,
+              }}>{assinando ? '⏳ Assinando...' : '✍️ Assinar laudo'}</button>
+            )
+          )}
+
+          <button onClick={baixarPDF} disabled={baixandoPdf} style={{
+            padding:'8px 16px', background:'#1e3a5f', border:'1px solid #1e3a5f',
+            borderRadius:8, color:'#fff', fontSize:13, cursor: baixandoPdf?'wait':'pointer', flexShrink:0,
+          }}>{baixandoPdf ? '⏳ Gerando...' : '📄 Baixar PDF'}</button>
+
+          {avaliacaoId !== 'consolidado' && (
+            <button onClick={() => setModalConfig(true)} style={{
+              padding: '8px 16px', background: '#334155', border: '1px solid #475569',
+              borderRadius: 8, color: '#e2e8f0', fontSize: 13, cursor: 'pointer', flexShrink: 0,
+            }}>⚙️ Configurar relatório</button>
+          )}
+        </div>
       </div>
 
       {/* Abas */}

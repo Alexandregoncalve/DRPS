@@ -93,6 +93,8 @@ app.use('/api/relatorio',     require('./routes/relatorio')(pool));
 app.use('/api/plano-acao',    require('./routes/plano_acao')(pool));
 app.use('/api/colaboradores', require('./routes/colaboradores')(pool));
 app.use('/api/importar',      require('./routes/importar')(pool));
+app.use('/api/pdf',           require('./routes/pdf_laudo')(pool));
+app.use('/api/assinatura',    require('./routes/assinatura')(pool));
 
 // ── Rotas Super Admin ─────────────────────────────────────────────────────────
 app.use('/api/superadmin/auth',       limiterLogin, require('./routes/superadmin/auth')(pool));
